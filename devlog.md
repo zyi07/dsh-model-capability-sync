@@ -186,3 +186,18 @@
 - P3：别名表 + 单模型手动编辑（解决 9 个未匹配）。
 - P4：停用 `dsh-llm-newapi`（bundle + patch 条目），让 `llm-pi-ai` 独占 `newapi` 路由，
   图片能力才会真正进入请求链路。
+
+### 发布完成（2026-10-21）
+
+- `npm publish` 成功：`dsh-model-capability-sync@0.1.0`。
+- 从 registry 重新 `npm install` 后跑了同样 12 项检查：全过（可 import、
+  `name`/`inject`/`apply` 正确、patch 与 client 产物齐全、可选 peer 未被安装）。
+- `npm view` 确认：`engines.dsh = ^0.2.1-rc.2`、`repository` 指向 GitHub、
+  unpackedSize 236941。
+- 社区目录的条目形状已从 `dsh-plugin-catalog@2026.1021.8781` 里核实
+  （6254 条真实记录）：手填 `name/owner/url/category/npm/description`，
+  `page/version/stars/downloads/capabilities` 由构建脚本生成；分类用 `model`。
+  已写进 `docs/publishing.md` 5.1。
+- 本机到 `raw.githubusercontent.com`、`cdn.jsdelivr.net`、以及后来的 `github.com`
+  clone 都不稳定（推自己的仓库能成功，clone 别人的仓库超时），所以 PR 交给维护者在
+  网页上提。

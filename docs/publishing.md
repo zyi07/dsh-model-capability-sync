@@ -54,18 +54,33 @@ dsh plugin --profile web add dsh-model-capability-sync   # 换一个干净 profi
 插件市场 `dshmarket` 的列表来自
 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)。
 **去那个仓库提 PR，加一条记录**；站点与市场会自动收录（通常一天内）。
-不要往 `dsh-market/dsh-market` 提，那个仓库是市场应用本身。
+不要往 `dsh-market/dsh-market`（市场应用本身）或 `dsh-plugin-catalog`
+（自动生成的产物）提 PR。
 
-条目文案（中英，供 PR 使用）：
+条目形状取自目录里真实的记录（`dsh-plugin-catalog` 的 `plugins.json`，
+2026-10-21 共 6254 条）。**只需要手填这几个字段**，其余由构建脚本生成：
 
-```text
-dsh-model-capability-sync — 模型能力同步
-从 models.dev 查询你已配置模型的上下文窗口、输出上限、是否支持图片、推理档位，
-写入 DSH 的 LLM 供应商配置。只写配置，不发推理请求；写入前逐字段预览差异。
-Fill context window, output cap, image input and reasoning efforts from models.dev
-into your configured DeepSeek Harness LLM provider. Configuration only — no inference
-request is sent, and every change is previewed field by field before it is written.
+```json
+{
+  "name": "dsh-model-capability-sync",
+  "owner": "zyi07",
+  "url": "https://github.com/zyi07/dsh-model-capability-sync",
+  "category": "model",
+  "npm": "dsh-model-capability-sync",
+  "description": {
+    "en": "Fill context window, output cap, image input and reasoning efforts from models.dev into your configured DeepSeek Harness LLM provider. Configuration only — no inference request is sent, and every change is previewed field by field before it is written.",
+    "zh": "从 models.dev 查询你已配置模型的上下文窗口、输出上限、是否支持图片、推理档位，写入 DSH 的 LLM 供应商配置。只写配置，不发推理请求；写入前逐字段预览差异。"
+  }
+}
 ```
+
+- `category` 用 `model`（Models & Providers / 模型与账号接入）。可选分类 id：
+  `agi, ui, usage, theme, model, identity, session, memory, tools, wsl, browser,
+  vision, voice, docs, skill, workflow, git, notify, dev, security, remote, market, fun`。
+- `page`、`version`、`stars`、`downloads`、`capabilities` 等字段由构建脚本抓取，
+  不要手写。
+- 收录后会出现在两处：站点 `https://awesome-dsh-plugin.com/p/zyi07/dsh-model-capability-sync/`，
+  以及插件市场（`index.json` 格式 1 索引，DSH 0.2.1+ 的「插件 → 发现」读的就是它）。
 
 ### 5.2 自建市场索引（备用）
 

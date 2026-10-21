@@ -98,8 +98,9 @@
 - [x] README：npm 安装 + 桌面版安装路径 + 许可证
 - [x] `docs/publishing.md`：发版手册、社区目录条目文案、自建索引 JSON
 - [x] `repository` / `homepage` / `bugs` 三个字段
-- [ ] 执行 `npm publish`
-- [ ] 向 awesome-dsh-plugin 提 PR 收录
+- [x] 执行 `npm publish`（2026-10-21，`dsh-model-capability-sync@0.1.0`；
+      从 registry 重新安装后 12 项检查全过）
+- [ ] 向 awesome-dsh-plugin 提 PR 收录（条目形状已确认，见 `docs/publishing.md` 5.1）
 
 **验收**：`npm view dsh-model-capability-sync version` 有输出；在干净 profile 里
 `dsh plugin add dsh-model-capability-sync` 能装上并出现在设置页。
