@@ -158,6 +158,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const [busy, setBusy] = useState<'idle' | 'analyzing' | 'applying'>('idle')
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [catalogInfo, setCatalogInfo] = useState<string | undefined>(undefined)
+  const [staleInfo, setStaleInfo] = useState<string | undefined>(undefined)
 
   /** Read every configurable entry and select the default target. */
   const load = async (): Promise<void> => {
@@ -206,6 +207,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     setBusy('analyzing')
     setErrorText(undefined)
     setNotice(undefined)
+    setStaleInfo(undefined)
     try {
       const ids = models.map(model => textOf(model, 'id')).filter(id => id.length > 0)
       const result = await preview({ ids, ...refresh ? { refresh: true } : {} })
@@ -216,6 +218,9 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
         models: result.value.catalogModels,
         time: new Date(result.value.fetchedAt).toLocaleString(),
       }))
+      setStaleInfo(result.value.stale === true
+        ? t('catalogStale', { time: new Date(result.value.fetchedAt).toLocaleString() })
+        : undefined)
       // Ask the adapter that owns this route what a request sees right now.
       // The entry we are about to write may not be the one serving it, so this
       // is the only honest answer to "did the write take effect".
@@ -341,6 +346,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       {errorText !== undefined ? <p className="cs-error">{errorText}</p> : null}
       {notice !== undefined ? <p className="cs-hint">{notice}</p> : null}
       {catalogInfo !== undefined ? <p className="cs-hint">{catalogInfo}</p> : null}
+      {staleInfo !== undefined ? <p className="cs-warn">{staleInfo}</p> : null}
 
       {rows !== undefined && matched.length > 0
         ? (

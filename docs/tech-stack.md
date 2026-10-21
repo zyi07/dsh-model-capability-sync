@@ -7,9 +7,10 @@
 | 语言 | TypeScript 5.9 | 与 dsh 官方插件一致；纯类型标注，构建时擦除 |
 | 宿主构建 | esbuild → 单文件 ESM | 官方适配器同款产物形态；`packages: 'external'` 让 `@deepseek-ai/*` 从宿主解析 |
 | 浏览器构建 | esbuild → `window.__ModuleLoader__.load` 模块工厂 | dsh web 的客户端加载契约，`scripts/build-client.mjs` 与官方插件一致 |
-| 运行时依赖 | **零** | 宿主产物不 import 任何第三方包；网络只用全局 `fetch` |
+| 运行时依赖 | **零** | 宿主产物不 import 任何第三方包；网络只用全局 `fetch`，文件只用 `node:fs/promises` |
 | 代理 | 可选动态导入 `undici` 的 `ProxyAgent` | 只在配置了代理时才加载；缺失时报明确错误而不是静默直连 |
-| 目录源 | `https://models.dev/api.json` | 公开、无需鉴权、9164 个模型 100% 带 `modalities` |
+| 目录缓存 | 内存 6h + 本机 `~/.dsh/model-capability-sync/catalog.json` | 宿主进程的网络和命令行不一定相同；下载失败时回落本机副本，页面不至于打不开 |
+| 目录源 | `https://models.dev/api.json` | 公开、无需鉴权、9165 个模型 100% 带 `modalities` |
 | 配置读写 | 官方 settings 服务（`remote.settings.describe/mutate`） | 与官方 Models 页同一条路径，落点就是 profile patch，热生效 |
 | 状态管理 | React 局部 state | 页面只有一张表，不引入状态库 |
 

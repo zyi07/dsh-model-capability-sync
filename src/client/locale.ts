@@ -43,6 +43,7 @@ export const zh = {
   viaBasename: '去前缀',
   viaSuffix: '去变体后缀',
   catalogInfo: '目录：{models} 个模型 · {time}',
+  catalogStale: '在线目录下载失败，正在使用本机缓存（{time}）。数据可能不是最新，字段含义不变。',
   nothingSelected: '没有选中任何模型。',
   done: '完成。',
 } as const
@@ -89,6 +90,7 @@ export const en: Record<SyncKey, string> = {
   viaBasename: 'basename',
   viaSuffix: 'suffix',
   catalogInfo: 'Catalog: {models} models · {time}',
+  catalogStale: 'The online catalog download failed; using the local copy from {time}. The facts still mean the same thing, they may just be older.',
   nothingSelected: 'Nothing selected.',
   done: 'Done.',
 }

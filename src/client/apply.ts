@@ -127,6 +127,7 @@ const SECTION_CSS = `
 .cs-button--primary:hover:not(:disabled) { background: var(--dsw-alias-button-primary-hover); }
 .cs-hint { font-size: 12px; color: var(--dsw-alias-label-tertiary); line-height: 18px; }
 .cs-error { color: var(--dsw-alias-state-error-primary); font-size: 12px; }
+.cs-warn { color: var(--dsw-alias-state-warning-primary, var(--dsw-alias-label-secondary)); font-size: 12px; line-height: 18px; }
 .cs-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
 .cs-table th {
   text-align: left; font-weight: 500; color: var(--dsw-alias-label-secondary);

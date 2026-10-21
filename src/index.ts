@@ -56,6 +56,7 @@ async function preview(request: PreviewRequest, signal: AbortSignal): Promise<Pr
   return {
     fetchedAt: catalog.fetchedAt,
     catalogModels: catalog.modelCount,
+    ...catalog.stale === true ? { stale: true } : {},
     rows: ids.map(id => previewOne(catalog, id, aliases)),
   }
 }

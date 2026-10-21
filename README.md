@@ -36,6 +36,10 @@
 - 匹配规则由严到松：别名 → 精确 → 忽略大小写 → 去供应商前缀 → 去变体后缀
   （`-high/-low/-medium/-thinking/-preview`）。优先选**第一方厂商**的目录条目，
   避免被聚合站的错误数字带偏。
+- 目录下载失败会重试 3 次，仍失败则回落到本机缓存
+  `~/.dsh/model-capability-sync/catalog.json`，页面标注「正在使用本机缓存」。
+  手动预热：`node --experimental-strip-types scripts/warm-cache.mjs`。
+  宿主进程连不上 models.dev 时页面依然可用。
 
 ## 安装
 
@@ -50,7 +54,7 @@ dsh plugin --profile desktop add "link:D:/code/dsh-model-capability-sync"
 | 路径 | 用途 |
 | --- | --- |
 | `src/index.ts` | 宿主半：RPC 通道 `preview`（目录能力）+ `live`（当前生效） |
-| `src/catalog.ts` | models.dev 下载 / 缓存 / 索引 |
+| `src/catalog.ts` | models.dev 下载 / 缓存（内存 + 本机文件）/ 索引 |
 | `src/match.ts` | 网关 id → 目录条目的匹配规则 |
 | `src/mapping.ts` | 目录条目 → 能力字段（纯函数） |
 | `src/client/` | 设置页（React 组件 + 文案） |

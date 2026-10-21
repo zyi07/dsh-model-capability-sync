@@ -84,6 +84,23 @@
   页面在「分析」时顺带取一次，新增「当前生效」列和一行汇总。
 - 判读：两列一致 = 写进去就生效；不一致 = 路由被别的插件占着，必须停用那个插件。
 
+### 第三步：`fetch failed`（已修）
+
+- 现象：重启后点「分析能力」，页面报 `fetch failed`。
+- 原因：目录下载只有一次机会，models.dev 一次失败就整页不可用；宿主进程
+  （Electron 主进程）和命令行走的网络路径不一定相同，命令行能通不代表应用能通。
+- 修复：
+  - 下载失败重试 3 次（间隔 600ms）；
+  - 仍失败则回落到本机缓存 `~/.dsh/model-capability-sync/catalog.json`，
+    响应带 `stale: true`，页面显示「正在使用本机缓存（时间）」；
+  - 只有「下载失败 + 本机无缓存」才报错，错误里带网络原因；
+  - 新增 `scripts/warm-cache.mjs` 预热缓存（已在本机执行：9165 个模型 / 5.9 MB）。
+- 附带：`tsconfig.json` 的 `types` 从 `[]` 改为 `["node"]`，新增 devDependency
+  `@types/node` —— 宿主半现在要用 `node:fs/promises`、`node:os`、`node:path`。
+  运行时依赖仍然是零。
+- 已知限制：`undici` 代理路径在 Electron 宿主里通常不可用（没有该 npm 包），
+  「宿主网络必须能直连 models.dev」这条约束目前靠本机缓存绕过，不靠代理。
+
 ### 下一步（等确认）
 
 - P4：停用 `dsh-llm-newapi`（bundle + patch 条目），让 `llm-pi-ai` 独占 `newapi` 路由，

@@ -73,6 +73,8 @@ export interface PreviewResponse {
   fetchedAt: number
   /** Number of models in the downloaded catalog. */
   catalogModels: number
+  /** True when the catalog came from the local copy because the download failed. */
+  stale?: boolean
   /** One row per requested id, in request order. */
   rows: PreviewRow[]
 }

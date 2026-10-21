@@ -4,12 +4,25 @@
  * One shared `api.json` carries every provider's model facts. The download
  * happens host-side so the browser never makes a cross-origin request, and a
  * forward proxy stays a plain HTTP proxy the host can use.
+ *
+ * A copy also lands on disk. The host process may sit behind a network the
+ * command line does not share — a proxy, a firewall, a flaky route — and a
+ * settings page that cannot open because one download failed is worse than a
+ * page reading a slightly old catalog. The disk copy is the fallback; its age
+ * is reported so the answer is never silently stale.
  * @module dsh-model-capability-sync/catalog
  */
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
 
 const CATALOG_URL = 'https://models.dev/api.json'
 /** Reuse one download for this long; a `refresh` request bypasses it. */
 const CACHE_TTL_MS = 6 * 60 * 60 * 1000
+/** Attempts per download before falling back to the disk copy. */
+const DOWNLOAD_ATTEMPTS = 3
+/** Pause between attempts: long enough to outlast a reset connection. */
+const RETRY_DELAY_MS = 600
 
 /** One model entry as models.dev publishes it (only the fields we read). */
 export interface ModelsDevModel {
@@ -37,6 +50,8 @@ export interface CatalogEntry {
 export interface Catalog {
   fetchedAt: number
   modelCount: number
+  /** True when this copy came from disk because the download failed. */
+  stale?: boolean
   /** Exact id → entries (a bare id can appear under several providers). */
   byId: Map<string, CatalogEntry[]>
   /** Lower-cased id → entries, for case-insensitive vendor spellings. */
@@ -44,6 +59,43 @@ export interface Catalog {
 }
 
 let cache: { catalog: Catalog; proxyUrl: string | undefined } | undefined
+
+/** Where the on-disk copy lives, mirroring the other plugins' data roots. */
+const CACHE_FILE = join(homedir(), '.dsh', 'model-capability-sync', 'catalog.json')
+
+/** The on-disk envelope: the raw catalog body plus when it was fetched. */
+interface DiskCache {
+  fetchedAt: number
+  source: string
+  body: unknown
+}
+
+/** Persist one successful download; a cache write must never fail the request. */
+async function writeDiskCache(body: unknown): Promise<void> {
+  try {
+    const envelope: DiskCache = { fetchedAt: Date.now(), source: CATALOG_URL, body }
+    await mkdir(dirname(CACHE_FILE), { recursive: true })
+    await writeFile(CACHE_FILE, JSON.stringify(envelope), 'utf8')
+  } catch {
+    // A read-only or full home directory only costs the fallback, not the answer.
+  }
+}
+
+/** Read the on-disk copy, or undefined when there is none to trust. */
+async function readDiskCache(): Promise<DiskCache | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(CACHE_FILE, 'utf8')) as Partial<DiskCache>
+    if (typeof parsed.fetchedAt !== 'number' || parsed.body === undefined) return undefined
+    return { fetchedAt: parsed.fetchedAt, source: typeof parsed.source === 'string' ? parsed.source : CATALOG_URL, body: parsed.body }
+  } catch {
+    return undefined
+  }
+}
+
+/** Wait between download attempts. */
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, ms) })
+}
 
 /** Push one entry into an index bucket. */
 function push(index: Map<string, CatalogEntry[]>, key: string, entry: CatalogEntry): void {
@@ -104,6 +156,10 @@ async function download(proxyUrl: string | undefined, signal: AbortSignal | unde
 /**
  * Load the catalog, reusing the cached copy unless it expired or the caller
  * asked for a refresh.
+ *
+ * A failed download is retried, then answered from the on-disk copy with
+ * `stale` set. Only when both paths fail does this throw, and the message
+ * names the network reason so the page can show something actionable.
  * @param options - refresh flag and optional proxy URL.
  * @param signal - caller cancellation.
  * @returns the indexed catalog.
@@ -117,8 +173,32 @@ export async function loadCatalog(
     && cache.proxyUrl === options.proxyUrl
     && now - cache.catalog.fetchedAt < CACHE_TTL_MS
   if (options.refresh !== true && fresh && cache !== undefined) return cache.catalog
-  const body = await download(options.proxyUrl, signal)
-  const catalog = buildCatalog(body, Date.now())
-  cache = { catalog, proxyUrl: options.proxyUrl }
-  return catalog
+
+  let lastError: unknown
+  for (let attempt = 1; attempt <= DOWNLOAD_ATTEMPTS; attempt += 1) {
+    try {
+      const body = await download(options.proxyUrl, signal)
+      const catalog = buildCatalog(body, Date.now())
+      cache = { catalog, proxyUrl: options.proxyUrl }
+      void writeDiskCache(body)
+      return catalog
+    } catch (error) {
+      if (signal?.aborted === true) throw error
+      lastError = error
+      if (attempt < DOWNLOAD_ATTEMPTS) await pause(RETRY_DELAY_MS)
+    }
+  }
+
+  const disk = await readDiskCache()
+  if (disk !== undefined) {
+    try {
+      const catalog: Catalog = { ...buildCatalog(disk.body, disk.fetchedAt), stale: true }
+      cache = { catalog, proxyUrl: options.proxyUrl }
+      return catalog
+    } catch {
+      // A corrupt copy is no better than no copy; report the download failure.
+    }
+  }
+  const reason = lastError instanceof Error ? lastError.message : String(lastError)
+  throw new Error(`models.dev catalog unavailable (${reason}) and no local copy exists`)
 }
