@@ -121,9 +121,9 @@ function isBlank(value: unknown): boolean {
 /**
  * Merge one row's capability fields into an existing model entry.
  *
- * `name` is deliberately not special-cased: an entry that already carries a
- * name keeps it, even when that name is just the id. Renaming models is not
- * this page's job — it only fills capability facts.
+ * `name` is never written: a label is the user's or the gateway's choice, and
+ * renaming models is not this page's job. The host no longer returns one, and
+ * the explicit skip keeps that true even against an older host build.
  * @param model - the entry as stored.
  * @param fields - catalog capabilities.
  * @param overwrite - replace values the user already set.
@@ -132,7 +132,7 @@ function isBlank(value: unknown): boolean {
 function mergeModel(model: ModelDraft, fields: CapabilityFields, overwrite: boolean): ModelDraft {
   const next: ModelDraft = { ...model }
   for (const [key, value] of Object.entries(fields)) {
-    if (value === undefined) continue
+    if (key === 'name' || value === undefined) continue
     if (!overwrite && !isBlank(next[key])) continue
     next[key] = value
   }
