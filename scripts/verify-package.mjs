@@ -28,6 +28,9 @@ check('main 指向存在的文件', typeof manifest.main === 'string' && existsS
 check('exports["./client"] 存在', existsSync(join(root, 'lib/client.js')))
 check('LICENSE 文件存在', existsSync(join(root, 'LICENSE')))
 check('README 存在', existsSync(join(root, 'README.md')))
+check('repository.url 已声明', typeof manifest.repository?.url === 'string', manifest.repository?.url)
+check('homepage 是绝对 URL', typeof manifest.homepage === 'string' && URL.canParse(manifest.homepage), manifest.homepage)
+check('bugs.url 是绝对 URL', typeof manifest.bugs?.url === 'string' && URL.canParse(manifest.bugs.url), manifest.bugs?.url)
 
 const patchPath = manifest.dsh?.bundle?.patch
 check('dsh.bundle.patch 已声明', typeof patchPath === 'string', patchPath)

@@ -17,13 +17,12 @@ npm 账号，仓库里只做准备工作。
 
 ## 2. 一次性准备
 
-需要补进 `package.json` 的三个字段（有仓库地址后填，缺了不影响安装，
-但社区目录和 npm 页面会少链接）：
+`package.json` 里已经填好仓库信息（`npm run verify:package` 会校验）：
 
 ```json
-"repository": { "type": "git", "url": "git+https://github.com/<账号>/dsh-model-capability-sync.git" },
-"homepage": "https://github.com/<账号>/dsh-model-capability-sync#readme",
-"bugs": { "url": "https://github.com/<账号>/dsh-model-capability-sync/issues" }
+"repository": { "type": "git", "url": "git+https://github.com/zyi07/dsh-model-capability-sync.git" },
+"homepage": "https://github.com/zyi07/dsh-model-capability-sync#readme",
+"bugs": { "url": "https://github.com/zyi07/dsh-model-capability-sync/issues" }
 ```
 
 npm 账号侧：`npm login`，并开启 2FA（发布时会被要求输入一次性密码）。

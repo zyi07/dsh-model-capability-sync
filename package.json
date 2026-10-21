@@ -58,6 +58,14 @@
     "multimodal"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zyi07/dsh-model-capability-sync.git"
+  },
+  "homepage": "https://github.com/zyi07/dsh-model-capability-sync#readme",
+  "bugs": {
+    "url": "https://github.com/zyi07/dsh-model-capability-sync/issues"
+  },
   "publishConfig": {
     "access": "public"
   },

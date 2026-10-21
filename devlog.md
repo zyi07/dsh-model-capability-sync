@@ -175,8 +175,11 @@
   client 只外部化 react、宿主产物无第三方 import）。可选 peer 没有被安装，符合预期。
 - `npm run verify:package` 22 项全过。
 
-待办：`repository`/`homepage`/`bugs` 需要仓库地址；`npm publish` 与 awesome-dsh-plugin
-的 PR 需要维护者本人操作。
+待办：`npm publish` 与 awesome-dsh-plugin 的 PR 需要维护者本人操作。
+
+仓库地址已定：`https://github.com/zyi07/dsh-model-capability-sync`，
+`repository` / `homepage` / `bugs` 已填进 `package.json`，并加了 3 项自检
+（`verify:package` 现在 25 项）。本地 git 已加 `origin` 远端。
 
 ### 下一步（等确认）
 

@@ -92,12 +92,12 @@
 - [x] `LICENSE`（MIT）
 - [x] `package.json`：`engines.dsh`、`publishConfig.access`、`peerDependenciesMeta`、
       `prepublishOnly`、`verify:package`；删掉指向不存在文件的 `types`
-- [x] `scripts/verify-package.mjs`：22 项发布前自检（清单见 `npm run verify:package`）
+- [x] `scripts/verify-package.mjs`：25 项发布前自检（清单见 `npm run verify:package`）
 - [x] `npm pack` 产物在干净目录 `npm install` 后验证：可 `import`、`name`/`inject`/`apply`
       正确、patch 与 client 产物齐全（12 项全过）
 - [x] README：npm 安装 + 桌面版安装路径 + 许可证
 - [x] `docs/publishing.md`：发版手册、社区目录条目文案、自建索引 JSON
-- [ ] `repository` / `homepage` / `bugs` 三个字段（需要仓库地址）
+- [x] `repository` / `homepage` / `bugs` 三个字段
 - [ ] 执行 `npm publish`
 - [ ] 向 awesome-dsh-plugin 提 PR 收录
 
