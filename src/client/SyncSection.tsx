@@ -27,7 +27,7 @@ export interface SettingsPathOp {
 export interface SyncSectionInjected {
   preview(request: { ids: string[]; aliases?: Record<string, string>; refresh?: boolean }): Promise<RpcEnvelope<PreviewResponse>>
   describeSettings(): Promise<SettingsDescriptor[]>
-  mutateSettings(ns: string, ops: SettingsPathOp[], expectedRevision?: number): Promise<unknown>
+  mutateSettings(ns: string, ops: SettingsPathOp[], expectedRevision?: number): Promise<SettingsDescriptor>
 }
 
 export interface SyncSectionProps extends SyncSectionInjected {
@@ -215,12 +215,17 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     setBusy('applying')
     setErrorText(undefined)
     try {
-      await mutateSettings(targetNs, [{
+      const view = await mutateSettings(targetNs, [{
         op: 'set',
         path: ['providers', providerKey, 'models'],
         value: next,
       }], descriptor.revision)
       setModels(next)
+      // Keep the held revision current, so a second apply does not conflict.
+      setDescriptors(previous => previous.map(entry =>
+        entry.ns === targetNs && typeof view.revision === 'number'
+          ? { ...entry, revision: view.revision }
+          : entry))
       setNotice(t('applied', { count: written }))
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : String(error))
@@ -229,7 +234,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     }
   }
 
-  if (status === 'loading') return <div className="cs-hint">{t('analyzing')}</div>
+  if (status === 'loading') return <div className="cs-hint">{t('loading')}</div>
 
   if (status === 'error') {
     return (

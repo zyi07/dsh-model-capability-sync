@@ -5,6 +5,7 @@
 
 export const zh = {
   nav: '模型能力同步',
+  loading: '正在读取配置…',
   intro: '从 models.dev 查询已配置模型的能力（上下文窗口、输出上限、是否支持图片、推理档位），并写入所选供应商的配置。本页只写配置，不发送任何推理请求。',
   target: '目标插件',
   provider: '供应商',
@@ -46,6 +47,7 @@ export type SyncKey = keyof typeof zh
 
 export const en: Record<SyncKey, string> = {
   nav: 'Model capabilities',
+  loading: 'Reading configuration…',
   intro: 'Look up capabilities (context window, output cap, image input, reasoning efforts) for the models already configured here, then write them into the selected provider. This page only writes configuration; it never sends a model request.',
   target: 'Target plugin',
   provider: 'Provider',

@@ -40,5 +40,23 @@
 
 - 写入依赖 `remote.settings.mutate` 跨命名空间可用；当前 0.2.1-rc.2 实测无 owner 校验，
   上游若收紧需改走「直接编辑 YAML + 提示重启」。
-- 设置页尚未在真实 GUI 中加载验证（需要把插件装进 desktop profile 并重启应用，
-  会中断当前会话，等用户安排）。
+
+### 装进 desktop profile 后的首个缺陷（已修）
+
+- 现象：设置页显示 `加载失败: list.filter is not a function`。
+- 原因：`remote.settings.describe()` 返回的是**信封** `{ok:true, value:{writable, namespaces:[…]}}`，
+  不是命名空间数组；`SyncSection.load()` 直接把它当数组 `.filter`。
+  依据：官方 `@deepseek-ai/dsh-client-ui-settings` 的 `SettingsDescribeMirror.run()`
+  里写着 `const response = await this.ctx.remote.settings.describe(); response.ok ? {view: response.value} …`。
+- 修复（`src/client/apply.ts`）：
+  - 新增 `refusalOf` / `unwrap` / `namespacesOf`，把信封统一拆开，数组和信封两种形状都接受；
+  - `describeSettings` 返回 `value.namespaces`；
+  - `mutateSettings` 拆信封并在 `ok:false` 时抛 `error.message`，把拒绝原因显示到页面上；
+  - 返回 `settings.mutate` 的命名空间视图，页面用它刷新持有的 `revision`，
+    避免连续两次「应用」时第二次报 `settings/conflict`。
+- 顺带：新增 `loading` 文案，首屏不再复用「正在匹配…」。
+- 命名空间视图字段（官方 `ConfigFormController.derive()` 实证）：`ns / revision / base / user / value`。
+
+### 待验证
+
+- 页面需刷新一次（只改了浏览器半，宿主半未变，不必重启应用）。

@@ -41,9 +41,60 @@ interface ConnectionFace {
 /** The remote face carrying the settings namespace. */
 interface RemoteFace {
   settings: {
-    describe(): Promise<SettingsDescriptor[]>
+    describe(): Promise<unknown>
     mutate(ns: string, ops: SettingsPathOp[], expectedRevision?: number): Promise<unknown>
   }
+}
+
+/** The document `settings.describe` answers with, once its envelope is opened. */
+interface SettingsDocument {
+  writable?: boolean
+  namespaces?: SettingsDescriptor[]
+}
+
+/**
+ * Read the failure message out of a Remote answer envelope.
+ * @param answer - whatever the Remote namespace resolved with.
+ * @returns the message when the answer is a refusal, otherwise undefined.
+ */
+function refusalOf(answer: unknown): string | undefined {
+  if (typeof answer !== 'object' || answer === null) return undefined
+  const envelope = answer as { ok?: unknown; error?: { message?: unknown } }
+  if (envelope.ok !== false) return undefined
+  return typeof envelope.error?.message === 'string' ? envelope.error.message : 'settings request refused'
+}
+
+/**
+ * Open a Remote answer envelope.
+ *
+ * Every `remote.settings` method answers `{ok: true, value}` or
+ * `{ok: false, error}`; a few surfaces hand back the bare value instead, so
+ * both shapes are accepted rather than guessed at one.
+ * @param answer - whatever the Remote namespace resolved with.
+ * @returns the value the answer carries.
+ * @throws the refusal message, or a shape complaint when neither form matches.
+ */
+function unwrap(answer: unknown): unknown {
+  const refusal = refusalOf(answer)
+  if (refusal !== undefined) throw new Error(refusal)
+  if (typeof answer === 'object' && answer !== null && 'ok' in answer && 'value' in answer) {
+    return (answer as { value: unknown }).value
+  }
+  return answer
+}
+
+/**
+ * The namespace views a describe answer carries.
+ * @param answer - the `settings.describe` answer, enveloped or bare.
+ * @returns every served namespace view.
+ * @throws when the answer holds no namespace list.
+ */
+function namespacesOf(answer: unknown): SettingsDescriptor[] {
+  const document = unwrap(answer) as SettingsDocument | SettingsDescriptor[] | undefined
+  if (Array.isArray(document)) return document
+  const namespaces = document?.namespaces
+  if (!Array.isArray(namespaces)) throw new Error('settings.describe returned no namespace list')
+  return namespaces
 }
 
 /** Required services (cordis fiber inject). */
@@ -118,8 +169,12 @@ export function apply(ctx: ClientContext): void {
   const injected = (): SyncSectionInjected => ({
     preview: request =>
       connection.rpc.call(CHANNEL, 'preview', request) as Promise<RpcEnvelope<PreviewResponse>>,
-    describeSettings: () => remote.settings.describe(),
-    mutateSettings: (ns, ops, expectedRevision) => remote.settings.mutate(ns, ops, expectedRevision),
+    describeSettings: async () => namespacesOf(await remote.settings.describe()),
+    mutateSettings: async (ns, ops, expectedRevision) => {
+      const view = unwrap(await remote.settings.mutate(ns, ops, expectedRevision)) as SettingsDescriptor | undefined
+      if (view === undefined) throw new Error('settings.mutate returned no namespace view')
+      return view
+    },
   })
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({

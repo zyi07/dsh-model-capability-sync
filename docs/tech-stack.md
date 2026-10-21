@@ -25,6 +25,12 @@
 
 - 目标宿主线：dsh `0.2.x`（验证于 `0.2.1-rc.2`）。
 - 浏览器半依赖 `slots` / `locale` / `connection` / `remote.settings` 四个服务。
+- `remote.settings` 的两个方法都返回**信封**：`{ok:true, value}` / `{ok:false, error:{code,message}}`。
+  - `describe()` → `value = { writable, namespaces: [{ ns, revision, base, user, value }] }`
+  - `mutate(ns, ops, expectedRevision)` → `value =` 该命名空间的视图（同上单条）
+  - 拒绝码里 `settings/conflict` 表示 `expectedRevision` 过期，需重新 `describe` 再写。
+  - 实证位置：`@deepseek-ai/dsh-client-ui-settings` 的 `SettingsDescribeMirror.run()` 与
+    `ConfigFormController.mutate()/derive()`。
 - 宿主半依赖 `connection` + `webServer` 两个服务（无 Web 服务的 profile 中本插件不挂载）。
 
 ## 目录结构决定
