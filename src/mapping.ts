@@ -52,6 +52,9 @@ function reasoningOf(entry: CatalogEntry): Record<string, string> | false | unde
 
 /**
  * Read every capability the catalog states for one entry.
+ *
+ * The catalog's display name is deliberately not returned: this plugin fills
+ * facts, it never renames a model entry.
  * @param entry - the matched catalog entry.
  * @returns only the fields the catalog actually declares.
  */
@@ -60,7 +63,6 @@ export function capabilitiesOf(entry: CatalogEntry): CapabilityFields {
   const input = modalitiesOf(entry)
   const reasoningEfforts = reasoningOf(entry)
   return {
-    ...model.name === undefined || model.name.length === 0 ? {} : { name: model.name },
     ...positive(model.limit?.context) === undefined ? {} : { contextWindow: positive(model.limit?.context) as number },
     ...positive(model.limit?.output) === undefined ? {} : { maxTokens: positive(model.limit?.output) as number },
     ...input === undefined ? {} : { input },

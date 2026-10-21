@@ -167,7 +167,6 @@ const SECTION_CSS = `
 .cs-table tr:last-child td { border-bottom: none; }
 .cs-row--changed td { background: var(--dsw-alias-bg-layer-2, transparent); }
 .cs-id { font-variant-numeric: tabular-nums; word-break: break-all; }
-.cs-sub { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 2px; }
 .cs-dim { color: var(--dsw-alias-label-tertiary); }
 .cs-change { white-space: nowrap; }
 .cs-from { color: var(--dsw-alias-label-tertiary); text-decoration: line-through; }

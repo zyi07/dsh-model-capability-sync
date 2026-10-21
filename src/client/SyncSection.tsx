@@ -119,22 +119,11 @@ function isBlank(value: unknown): boolean {
 }
 
 /**
- * Whether one field of one entry is still unfilled.
- *
- * A `name` equal to the entry's own id is the provider's placeholder, not a
- * choice: filling it with the catalog's display name loses nothing.
- * @param model - the entry as stored.
- * @param key - the field being considered.
- * @param value - that field's stored value.
- * @returns true when the field may be overwritten without asking.
- */
-function isUnfilled(model: ModelDraft, key: string, value: unknown): boolean {
-  if (isBlank(value)) return true
-  return key === 'name' && typeof value === 'string' && value === textOf(model, 'id')
-}
-
-/**
  * Merge one row's capability fields into an existing model entry.
+ *
+ * `name` is deliberately not special-cased: an entry that already carries a
+ * name keeps it, even when that name is just the id. Renaming models is not
+ * this page's job — it only fills capability facts.
  * @param model - the entry as stored.
  * @param fields - catalog capabilities.
  * @param overwrite - replace values the user already set.
@@ -144,7 +133,7 @@ function mergeModel(model: ModelDraft, fields: CapabilityFields, overwrite: bool
   const next: ModelDraft = { ...model }
   for (const [key, value] of Object.entries(fields)) {
     if (value === undefined) continue
-    if (!overwrite && !isUnfilled(model, key, next[key])) continue
+    if (!overwrite && !isBlank(next[key])) continue
     next[key] = value
   }
   return next
@@ -548,7 +537,6 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
                       {visible.map(({ row, model, changes }) => {
                         const changeOf = (key: keyof CapabilityFields): FieldChange | undefined =>
                           changes.find(change => change.key === key)
-                        const nameChange = changeOf('name')
                         return (
                           <tr key={row.id} className={changes.length > 0 ? 'cs-row--changed' : undefined}>
                             <td>
@@ -560,17 +548,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
                                 onChange={() => { toggle(row.id) }}
                               />
                             </td>
-                            <td className="cs-id">
-                              {row.id}
-                              {nameChange === undefined
-                                ? null
-                                : (
-                                  <div className="cs-sub">
-                                    <span className="cs-from">{String(nameChange.before)}</span>
-                                    {' → '}{String(nameChange.after)}
-                                  </div>
-                                )}
-                            </td>
+                            <td className="cs-id">{row.id}</td>
                             <td className="cs-dim">
                               {row.match === undefined ? '—' : `${row.match.provider}/${row.match.modelId}`}
                               {' '}<span className="cs-badge">{viaLabel(row, t)}</span>

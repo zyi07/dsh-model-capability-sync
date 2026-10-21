@@ -11,10 +11,12 @@ export type Modality = 'text' | 'image'
  * The capability fields this plugin can fill into one provider model entry.
  * The names are the provider's own field names (pi-ai uses these exact ones),
  * so a filled entry is written verbatim into the provider configuration.
+ *
+ * `name` is deliberately absent: this plugin fills facts, it never renames a
+ * model. A label is the user's (or the gateway's) choice, and rewriting it
+ * would be a surprise no capability edit justifies.
  */
 export interface CapabilityFields {
-  /** Display name from the catalog; never overwrites a user-set name unless asked. */
-  name?: string
   /** Total request+response context capacity in tokens. */
   contextWindow?: number
   /** Per-request output cap in tokens. */
