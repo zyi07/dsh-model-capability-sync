@@ -1,0 +1,8 @@
+# dsh-model-capability-sync bundle patch
+#
+# 在 profile 组合中插入插件行。本插件不注册任何 LLM 路由，只注册一个自有 RPC
+# 通道 + 一个设置页，因此不会与任何适配器争抢 provider 路由。
+
+- insert:
+    - id: model-capability-sync
+      name: dsh-model-capability-sync

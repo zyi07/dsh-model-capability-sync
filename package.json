@@ -1,0 +1,62 @@
+{
+  "name": "dsh-model-capability-sync",
+  "version": "0.1.0",
+  "description": "Fill model capabilities (context window, output cap, input modalities, reasoning efforts) into an already-configured DeepSeek Harness LLM provider by matching gateway model ids against the models.dev catalog. Host half fetches and matches; browser half previews and writes through the official settings service.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": "./lib/client.js",
+    "./src/*": "./src/*",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "src",
+    "scripts",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
+  },
+  "scripts": {
+    "build": "npm run build:host && npm run build:client",
+    "build:host": "node scripts/build-host.mjs",
+    "build:client": "node scripts/build-client.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "models.dev",
+    "capability",
+    "multimodal"
+  ],
+  "license": "MIT",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "react": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.9.2"
+  }
+}
