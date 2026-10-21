@@ -141,6 +141,43 @@
   work-cn → work-gj` 分组，组内名称有序。
 - 两端 `tsc --noEmit` 通过，`npm run build` 通过（`lib/client.js` 36.5 KB）。
 
+### P5 发版准备（仓库就绪，未发布）
+
+先查了 DSH 的分发机制，结论写进 `docs/publishing.md`：
+
+- `dsh plugin add` 接受四类 spec（`@deepseek-ai/dsh-plugin-manager` 的 `parseInstallSpec`）：
+  npm 包名（可带 `@range`）、git URL/简写、tarball（本地绝对路径或 http(s)）、`link:`。
+- 官方发现页 `@deepseek-ai/dsh-plugin-market` 的 `indexes` **默认是空数组**——
+  不发索引源就没有任何市场请求，所以只发 npm 别人搜不到。
+- 社区目录走 `awesome-dsh-plugin` 仓库的 PR，`dshmarket` 与站点自动收录。
+- 市场索引是"格式 1" JSON（`@deepseek-ai/dsh-plugin-market-index` 校验）：
+  `format: 1`、`title` 必须有 `en` 键、`publishTimestamp` 是 Unix 秒、
+  `source.type` 为 `npm` 或 `git`（git 要 40 位 commit）。
+- 兼容性由 `package.json` 的 `engines.dsh` 单独决定（`evaluatePluginCompatibility`），
+  声明了就忽略 `peerDependencies` 里的 `@deepseek-ai/dsh*`。
+
+本批改动：
+
+- 新增 `LICENSE`（MIT）。
+- `package.json`：加 `engines.dsh: ^0.2.1-rc.2`（实测运行时版本）、`publishConfig.access: public`、
+  `peerDependenciesMeta` 把 `@deepseek-ai/cordis` 和 `react` 标成 optional（否则 pnpm 会
+  真把它们装进用户 profile）、`prepublishOnly`（typecheck + build + verify）；
+  **删掉 `types` 字段**——它指向不存在的 `lib/types/index.d.ts`，留着会让
+  TS 消费者报错；`keywords` 补 `dsh-plugin`。
+- 新增 `scripts/verify-package.mjs`（22 项自检）并接进 `prepublishOnly`。
+- README：npm 安装、桌面版必须走「设置 → 插件」、`engines.dsh` 说明、许可证、里程碑更新。
+- 新增 `docs/publishing.md`：发版手册 + 社区目录中英条目文案 + 自建索引 JSON 示例。
+
+实测：
+
+- `npm pack` → 22 个文件 / 69.3 kB；在干净目录 `npm install` 后 12 项检查全过
+  （可 `import`、`name`/`inject`/`apply` 正确、patch 与 client 产物齐全、
+  client 只外部化 react、宿主产物无第三方 import）。可选 peer 没有被安装，符合预期。
+- `npm run verify:package` 22 项全过。
+
+待办：`repository`/`homepage`/`bugs` 需要仓库地址；`npm publish` 与 awesome-dsh-plugin
+的 PR 需要维护者本人操作。
+
 ### 下一步（等确认）
 
 - P3：别名表 + 单模型手动编辑（解决 9 个未匹配）。

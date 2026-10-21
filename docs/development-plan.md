@@ -85,8 +85,21 @@
 
 **注意**：需要停应用改 profile 再重启，会中断当前会话，必须先确认。
 
-## P5 打包（收尾）
+## P5 打包（仓库已就绪，待发布）
 
-- [ ] `npm pack` 产物装进隔离 `DSH_HOME` 验证
-- [ ] 版本号 `0.1.0`（本插件独立版本线，不跟随宿主）
-- [ ] README 能力表与已知边界复核
+**目标**：别人能用一条命令装上。
+
+- [x] `LICENSE`（MIT）
+- [x] `package.json`：`engines.dsh`、`publishConfig.access`、`peerDependenciesMeta`、
+      `prepublishOnly`、`verify:package`；删掉指向不存在文件的 `types`
+- [x] `scripts/verify-package.mjs`：22 项发布前自检（清单见 `npm run verify:package`）
+- [x] `npm pack` 产物在干净目录 `npm install` 后验证：可 `import`、`name`/`inject`/`apply`
+      正确、patch 与 client 产物齐全（12 项全过）
+- [x] README：npm 安装 + 桌面版安装路径 + 许可证
+- [x] `docs/publishing.md`：发版手册、社区目录条目文案、自建索引 JSON
+- [ ] `repository` / `homepage` / `bugs` 三个字段（需要仓库地址）
+- [ ] 执行 `npm publish`
+- [ ] 向 awesome-dsh-plugin 提 PR 收录
+
+**验收**：`npm view dsh-model-capability-sync version` 有输出；在干净 profile 里
+`dsh plugin add dsh-model-capability-sync` 能装上并出现在设置页。

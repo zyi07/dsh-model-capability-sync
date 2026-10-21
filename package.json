@@ -4,12 +4,8 @@
   "description": "Fill model capabilities (context window, output cap, input modalities, reasoning efforts) into an already-configured DeepSeek Harness LLM provider by matching gateway model ids against the models.dev catalog. Host half fetches and matches; browser half previews and writes through the official settings service.",
   "type": "module",
   "main": "lib/index.js",
-  "types": "lib/types/index.d.ts",
   "exports": {
-    ".": {
-      "types": "./lib/types/index.d.ts",
-      "default": "./lib/index.js"
-    },
+    ".": "./lib/index.js",
     "./client": "./lib/client.js",
     "./src/*": "./src/*",
     "./package.json": "./package.json"
@@ -19,8 +15,12 @@
     "src",
     "scripts",
     "cordis.patch.yml",
+    "LICENSE",
     "README.md"
   ],
+  "engines": {
+    "dsh": "^0.2.1-rc.2"
+  },
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -40,19 +40,38 @@
     "build": "npm run build:host && npm run build:client",
     "build:host": "node scripts/build-host.mjs",
     "build:client": "node scripts/build-client.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "npm run typecheck:host && npm run typecheck:client",
+    "typecheck:host": "tsc -p tsconfig.json --noEmit",
+    "typecheck:client": "tsc -p tsconfig.client.json --noEmit",
+    "prepublishOnly": "npm run typecheck && npm run build && npm run verify:package",
+    "verify:package": "node scripts/verify-package.mjs",
+    "pack:check": "npm pack --dry-run"
   },
   "keywords": [
     "dsh",
+    "dsh-plugin",
+    "deepseek",
     "deepseek-harness",
     "models.dev",
     "capability",
+    "context-window",
     "multimodal"
   ],
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
