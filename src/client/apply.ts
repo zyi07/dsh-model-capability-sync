@@ -52,16 +52,27 @@ interface SettingsDocument {
   namespaces?: SettingsDescriptor[]
 }
 
+/** A refusal as the Remote namespace states it. */
+interface Refusal {
+  /** Machine-readable reason; `settings/conflict` is the one callers act on. */
+  code?: string
+  /** Human message for the page. */
+  message: string
+}
+
 /**
- * Read the failure message out of a Remote answer envelope.
+ * Read the refusal out of a Remote answer envelope.
  * @param answer - whatever the Remote namespace resolved with.
- * @returns the message when the answer is a refusal, otherwise undefined.
+ * @returns the refusal when the answer carries one, otherwise undefined.
  */
-function refusalOf(answer: unknown): string | undefined {
+function refusalOf(answer: unknown): Refusal | undefined {
   if (typeof answer !== 'object' || answer === null) return undefined
-  const envelope = answer as { ok?: unknown; error?: { message?: unknown } }
+  const envelope = answer as { ok?: unknown; error?: { code?: unknown; message?: unknown } }
   if (envelope.ok !== false) return undefined
-  return typeof envelope.error?.message === 'string' ? envelope.error.message : 'settings request refused'
+  return {
+    ...typeof envelope.error?.code === 'string' ? { code: envelope.error.code } : {},
+    message: typeof envelope.error?.message === 'string' ? envelope.error.message : 'settings request refused',
+  }
 }
 
 /**
@@ -69,14 +80,17 @@ function refusalOf(answer: unknown): string | undefined {
  *
  * Every `remote.settings` method answers `{ok: true, value}` or
  * `{ok: false, error}`; a few surfaces hand back the bare value instead, so
- * both shapes are accepted rather than guessed at one.
+ * both shapes are accepted rather than guessed at one. A refusal keeps its
+ * `code`, so the section can tell a stale revision apart from a real failure.
  * @param answer - whatever the Remote namespace resolved with.
  * @returns the value the answer carries.
- * @throws the refusal message, or a shape complaint when neither form matches.
+ * @throws the refusal, carrying `code` when the answer had one.
  */
 function unwrap(answer: unknown): unknown {
   const refusal = refusalOf(answer)
-  if (refusal !== undefined) throw new Error(refusal)
+  if (refusal !== undefined) {
+    throw Object.assign(new Error(refusal.message), refusal.code === undefined ? {} : { code: refusal.code })
+  }
   if (typeof answer === 'object' && answer !== null && 'ok' in answer && 'value' in answer) {
     return (answer as { value: unknown }).value
   }
@@ -128,17 +142,35 @@ const SECTION_CSS = `
 .cs-hint { font-size: 12px; color: var(--dsw-alias-label-tertiary); line-height: 18px; }
 .cs-error { color: var(--dsw-alias-state-error-primary); font-size: 12px; }
 .cs-warn { color: var(--dsw-alias-state-warning-primary, var(--dsw-alias-label-secondary)); font-size: 12px; line-height: 18px; }
-.cs-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+.cs-input {
+  box-sizing: border-box; padding: 6px 10px; border-radius: 8px; min-width: 200px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-primary);
+  font: inherit; font-size: 13px;
+}
+.cs-table-wrap {
+  max-height: 460px; overflow: auto; margin-bottom: 12px;
+  border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
+}
+.cs-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .cs-table th {
+  position: sticky; top: 0; z-index: 1;
   text-align: left; font-weight: 500; color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-layer-1);
   padding: 6px 8px; border-bottom: 1px solid var(--dsw-alias-border-l2); white-space: nowrap;
 }
 .cs-table td {
   padding: 6px 8px; border-bottom: 1px solid var(--dsw-alias-border-l2);
   color: var(--dsw-alias-label-primary); vertical-align: top;
 }
+.cs-table tr:last-child td { border-bottom: none; }
+.cs-row--changed td { background: var(--dsw-alias-bg-layer-2, transparent); }
 .cs-id { font-variant-numeric: tabular-nums; word-break: break-all; }
+.cs-sub { font-size: 11px; color: var(--dsw-alias-label-tertiary); margin-top: 2px; }
 .cs-dim { color: var(--dsw-alias-label-tertiary); }
+.cs-change { white-space: nowrap; }
+.cs-from { color: var(--dsw-alias-label-tertiary); text-decoration: line-through; }
 .cs-badge {
   display: inline-block; padding: 0 6px; border-radius: 9px; font-size: 11px; line-height: 18px;
   border: 1px solid var(--dsw-alias-border-l2); color: var(--dsw-alias-label-secondary);

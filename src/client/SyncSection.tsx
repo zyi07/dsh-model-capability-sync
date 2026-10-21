@@ -1,6 +1,6 @@
 /**
  * The capability-sync settings section: pick the provider entry, analyze its
- * models against models.dev, review what would be written, then apply.
+ * models against models.dev, review what would change, then apply.
  *
  * Pure props — no context access, no subscriptions. Everything arrives through
  * the inject face `apply` builds, including the bound translate function.
@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CapabilityFields, LiveResponse, LiveRow, PreviewResponse, PreviewRow, RpcEnvelope } from '../types.ts'
+import { sortByModelId } from '../sort.ts'
 
 /** One settings descriptor as the remote reports it (only the fields used here). */
 export interface SettingsDescriptor {
@@ -41,6 +42,20 @@ type ModelDraft = Record<string, unknown>
 /** The official adapter this plugin fills capabilities into. */
 const TARGET_DEFAULT = 'llm-pi-ai'
 
+/** One capability field that applying a row would rewrite. */
+interface FieldChange {
+  key: keyof CapabilityFields
+  before: unknown
+  after: unknown
+}
+
+/** One preview row joined with the stored entry it would rewrite. */
+interface PlanRow {
+  row: PreviewRow
+  model: ModelDraft
+  changes: FieldChange[]
+}
+
 /** Read a string field, or the empty string. */
 function textOf(model: ModelDraft, key: string): string {
   const value = model[key]
@@ -61,27 +76,17 @@ function modelsOf(provider: Record<string, unknown> | undefined): ModelDraft[] {
   return Array.isArray(models) ? models.filter((entry): entry is ModelDraft => typeof entry === 'object' && entry !== null) : []
 }
 
+/** The models of one provider profile, in display order. */
+function sortedModelsOf(provider: Record<string, unknown> | undefined): ModelDraft[] {
+  return sortByModelId(modelsOf(provider), model => textOf(model, 'id'))
+}
+
 /** Human token count: 128000 → `128K`, 1000000 → `1M`. */
-function tokens(value: number | undefined): string {
-  if (value === undefined) return '—'
+function tokens(value: unknown): string {
+  if (typeof value !== 'number') return '—'
   if (value >= 1_000_000) return `${String(Number((value / 1_000_000).toFixed(1)))}M`
   if (value >= 1000) return `${String(Number((value / 1000).toFixed(0)))}K`
   return String(value)
-}
-
-/** The image verdict of one row's fields. */
-function imageLabel(fields: CapabilityFields | undefined, t: SyncSectionProps['t']): string {
-  if (fields?.input === undefined) return '—'
-  return fields.input.includes('image') ? t('imageYes') : t('imageNo')
-}
-
-/** The reasoning verdict of one row's fields. */
-function reasoningLabel(fields: CapabilityFields | undefined): string {
-  const efforts = fields?.reasoningEfforts
-  if (efforts === undefined) return '—'
-  if (efforts === false) return 'off'
-  const keys = Object.keys(efforts)
-  return keys.length === 0 ? '—' : keys.join(' / ')
 }
 
 /** Which rule produced a match, as section copy. */
@@ -114,6 +119,21 @@ function isBlank(value: unknown): boolean {
 }
 
 /**
+ * Whether one field of one entry is still unfilled.
+ *
+ * A `name` equal to the entry's own id is the provider's placeholder, not a
+ * choice: filling it with the catalog's display name loses nothing.
+ * @param model - the entry as stored.
+ * @param key - the field being considered.
+ * @param value - that field's stored value.
+ * @returns true when the field may be overwritten without asking.
+ */
+function isUnfilled(model: ModelDraft, key: string, value: unknown): boolean {
+  if (isBlank(value)) return true
+  return key === 'name' && typeof value === 'string' && value === textOf(model, 'id')
+}
+
+/**
  * Merge one row's capability fields into an existing model entry.
  * @param model - the entry as stored.
  * @param fields - catalog capabilities.
@@ -124,10 +144,46 @@ function mergeModel(model: ModelDraft, fields: CapabilityFields, overwrite: bool
   const next: ModelDraft = { ...model }
   for (const [key, value] of Object.entries(fields)) {
     if (value === undefined) continue
-    if (!overwrite && !isBlank(next[key])) continue
+    if (!overwrite && !isUnfilled(model, key, next[key])) continue
     next[key] = value
   }
   return next
+}
+
+/**
+ * The fields applying one row would actually rewrite.
+ * @param model - the entry as stored.
+ * @param fields - catalog capabilities.
+ * @param overwrite - replace values the user already set.
+ * @returns one entry per changed field, in field order; empty when nothing moves.
+ */
+function changesBetween(model: ModelDraft, fields: CapabilityFields, overwrite: boolean): FieldChange[] {
+  const next = mergeModel(model, fields, overwrite)
+  const changes: FieldChange[] = []
+  for (const key of Object.keys(fields) as Array<keyof CapabilityFields>) {
+    const before = model[key]
+    const after = next[key]
+    if (JSON.stringify(before) === JSON.stringify(after)) continue
+    changes.push({ key, before, after })
+  }
+  return changes
+}
+
+/** The image verdict of one modality list. */
+function imageText(value: unknown, t: SyncSectionProps['t']): string {
+  if (Array.isArray(value) && value.includes('image')) return t('imageYes')
+  if (isBlank(value)) return t('fieldEmpty')
+  return t('imageNo')
+}
+
+/** The reasoning verdict of one effort value. */
+function reasoningText(value: unknown): string {
+  if (value === false) return 'off'
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    const keys = Object.keys(value as Record<string, unknown>)
+    return keys.length === 0 ? '—' : keys.join(' / ')
+  }
+  return '—'
 }
 
 /** The image verdict the owning adapter reports right now. */
@@ -136,6 +192,23 @@ function liveLabel(row: LiveRow | undefined, t: SyncSectionProps['t']): string {
   if (row.error !== undefined) return t('liveError')
   if (row.input === undefined) return '—'
   return row.input.includes('image') ? t('imageYes') : t('imageNo')
+}
+
+/**
+ * One value cell: the stored value alone, or `before → after` when it moves.
+ * @param change - the change for this field, when there is one.
+ * @param current - the stored value.
+ * @param format - renders one value as section copy.
+ * @returns the cell body.
+ */
+function valueCell(change: FieldChange | undefined, current: unknown, format: (value: unknown) => string): ReactNode {
+  if (change === undefined) return <span className="cs-dim">{format(current)}</span>
+  return (
+    <span className="cs-change">
+      <span className="cs-from">{format(change.before)}</span>
+      {' → '}{format(change.after)}
+    </span>
+  )
 }
 
 /**
@@ -155,10 +228,36 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const [liveRows, setLiveRows] = useState<ReadonlyMap<string, LiveRow>>(new Map())
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [overwrite, setOverwrite] = useState(false)
+  const [query, setQuery] = useState('')
+  const [onlyChanged, setOnlyChanged] = useState(false)
   const [busy, setBusy] = useState<'idle' | 'analyzing' | 'applying'>('idle')
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [catalogInfo, setCatalogInfo] = useState<string | undefined>(undefined)
   const [staleInfo, setStaleInfo] = useState<string | undefined>(undefined)
+
+  /** Everything a write would touch, joined with the stored entries. */
+  const plan: PlanRow[] = (() => {
+    if (rows === undefined) return []
+    const stored = new Map(models.map(model => [textOf(model, 'id'), model]))
+    return rows.map((row) => {
+      const model = stored.get(row.id) ?? {}
+      const fields = row.fields
+      return {
+        row,
+        model,
+        changes: fields === undefined ? [] : changesBetween(model, fields, overwrite),
+      }
+    })
+  })()
+  const matched = plan.filter(entry => entry.row.fields !== undefined)
+  const unmatched = plan.filter(entry => entry.row.fields === undefined)
+  const changing = matched.filter(entry => entry.changes.length > 0)
+  const changeFields = changing.reduce((total, entry) => total + entry.changes.length, 0)
+  const liveImage = matched.filter(entry => liveRows.get(entry.row.id)?.input?.includes('image') === true).length
+  const liveText = matched.filter((entry) => {
+    const answer = liveRows.get(entry.row.id)
+    return answer?.input !== undefined && !answer.input.includes('image')
+  }).length
 
   /** Read every configurable entry and select the default target. */
   const load = async (): Promise<void> => {
@@ -178,10 +277,11 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       const firstKey = Object.keys(providers)[0] ?? ''
       setTargetNs(target.ns)
       setProviderKey(firstKey)
-      setModels(modelsOf(providers[firstKey]))
+      setModels(sortedModelsOf(providers[firstKey]))
       setRows(undefined)
       setLiveRows(new Map())
       setSelected(new Set())
+      setQuery('')
       setStatus('ready')
     } catch (error) {
       setStatus('error')
@@ -191,15 +291,44 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
 
   useEffect(() => { void load() }, [])
 
-  /** Switch the provider key inside the selected entry. */
-  const selectProvider = (key: string): void => {
-    const descriptor = descriptors.find(entry => entry.ns === targetNs)
-    setProviderKey(key)
-    setModels(modelsOf(providersOf(descriptor)[key]))
+  /** Show one provider's models, in display order, with a clean slate. */
+  const showProvider = (ns: string, key: string): void => {
+    const providers = providersOf(descriptors.find(entry => entry.ns === ns))
+    const resolved = key !== '' && providers[key] !== undefined ? key : Object.keys(providers)[0] ?? ''
+    setTargetNs(ns)
+    setProviderKey(resolved)
+    setModels(sortedModelsOf(providers[resolved]))
     setRows(undefined)
     setLiveRows(new Map())
     setSelected(new Set())
     setNotice(undefined)
+    setQuery('')
+  }
+
+  /** Ask the owning adapter what a request sees for these ids. */
+  const refreshLive = async (provider: string, ids: string[]): Promise<void> => {
+    try {
+      const answer = await live({ provider, ids })
+      setLiveRows(answer.ok ? new Map(answer.value.rows.map(row => [row.id, row])) : new Map())
+    } catch {
+      setLiveRows(new Map())
+    }
+  }
+
+  /** Re-read the configuration without losing the analysis on screen. */
+  const reloadConfig = async (): Promise<void> => {
+    const list = await describeSettings()
+    setDescriptors(list)
+    const descriptor = list.find(entry => entry.ns === targetNs)
+    if (descriptor !== undefined) setModels(sortedModelsOf(providersOf(descriptor)[providerKey]))
+  }
+
+  /** Preselect every row that would actually change. */
+  const selectChanging = (source: readonly PreviewRow[], stored: readonly ModelDraft[], mode: boolean): void => {
+    const byId = new Map(stored.map(model => [textOf(model, 'id'), model]))
+    setSelected(new Set(source
+      .filter(row => row.fields !== undefined && changesBetween(byId.get(row.id) ?? {}, row.fields, mode).length > 0)
+      .map(row => row.id)))
   }
 
   /** Resolve every configured id against the catalog. */
@@ -213,7 +342,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       const result = await preview({ ids, ...refresh ? { refresh: true } : {} })
       if (!result.ok) throw new Error(result.error.message)
       setRows(result.value.rows)
-      setSelected(new Set(result.value.rows.filter(row => row.fields !== undefined).map(row => row.id)))
+      selectChanging(result.value.rows, models, overwrite)
       setCatalogInfo(t('catalogInfo', {
         models: result.value.catalogModels,
         time: new Date(result.value.fetchedAt).toLocaleString(),
@@ -221,15 +350,9 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       setStaleInfo(result.value.stale === true
         ? t('catalogStale', { time: new Date(result.value.fetchedAt).toLocaleString() })
         : undefined)
-      // Ask the adapter that owns this route what a request sees right now.
-      // The entry we are about to write may not be the one serving it, so this
-      // is the only honest answer to "did the write take effect".
-      try {
-        const answer = await live({ provider: providerKey, ids })
-        setLiveRows(answer.ok ? new Map(answer.value.rows.map(row => [row.id, row])) : new Map())
-      } catch {
-        setLiveRows(new Map())
-      }
+      // The entry we are about to write may not be the route a request takes,
+      // so this is the only honest answer to "did the write take effect".
+      await refreshLive(providerKey, ids)
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : String(error))
     } finally {
@@ -237,26 +360,34 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     }
   }
 
+  /** Switch the overwrite mode and follow it with the selection. */
+  const setOverwriteMode = (mode: boolean): void => {
+    setOverwrite(mode)
+    if (rows === undefined) return
+    selectChanging(rows, models, mode)
+  }
+
   /** Write the selected rows into the provider entry. */
   const applyRows = async (): Promise<void> => {
-    if (rows === undefined) return
     const descriptor = descriptors.find(entry => entry.ns === targetNs)
     if (descriptor === undefined) return
-    const byId = new Map(rows.map(row => [row.id, row]))
-    let written = 0
-    const next = models.map((model) => {
-      const id = textOf(model, 'id')
-      const row = byId.get(id)
-      if (row?.fields === undefined || !selected.has(id)) return model
-      written += 1
-      return mergeModel(model, row.fields, overwrite)
-    })
-    if (written === 0) {
+    const targets = new Map(changing
+      .filter(entry => selected.has(entry.row.id))
+      .map(entry => [entry.row.id, entry]))
+    if (targets.size === 0) {
       setNotice(t('nothingSelected'))
       return
     }
+    let written = 0
+    const next = models.map((model) => {
+      const entry = targets.get(textOf(model, 'id'))
+      if (entry?.row.fields === undefined) return model
+      written += 1
+      return mergeModel(model, entry.row.fields, overwrite)
+    })
     setBusy('applying')
     setErrorText(undefined)
+    setNotice(undefined)
     try {
       const view = await mutateSettings(targetNs, [{
         op: 'set',
@@ -270,8 +401,22 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
           ? { ...entry, revision: view.revision }
           : entry))
       setNotice(t('applied', { count: written }))
+      await refreshLive(providerKey, next.map(model => textOf(model, 'id')).filter(id => id.length > 0))
     } catch (error) {
-      setErrorText(error instanceof Error ? error.message : String(error))
+      const code = (error as { code?: string } | undefined)?.code
+      if (code === 'settings/conflict') {
+        // Someone else wrote this entry while the page was open. Reload the
+        // baseline instead of retrying blindly: a silent retry would overwrite
+        // whatever they just saved.
+        try {
+          await reloadConfig()
+        } catch {
+          // Keep the conflict message; the reload is only a convenience.
+        }
+        setNotice(t('conflictReload'))
+      } else {
+        setErrorText(error instanceof Error ? error.message : String(error))
+      }
     } finally {
       setBusy('idle')
     }
@@ -290,13 +435,14 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
 
   const descriptor = descriptors.find(entry => entry.ns === targetNs)
   const providerKeys = Object.keys(providersOf(descriptor))
-  const unmatched = (rows ?? []).filter(row => row.fields === undefined)
-  const matched = (rows ?? []).filter(row => row.fields !== undefined)
-  const liveImage = matched.filter(row => liveRows.get(row.id)?.input?.includes('image') === true).length
-  const liveText = matched.filter((row) => {
-    const answer = liveRows.get(row.id)
-    return answer?.input !== undefined && !answer.input.includes('image')
-  }).length
+  const needle = query.trim().toLowerCase()
+  const visible = matched.filter((entry) => {
+    if (onlyChanged && entry.changes.length === 0) return false
+    if (needle === '') return true
+    return entry.row.id.toLowerCase().includes(needle)
+      || entry.row.match?.modelId.toLowerCase().includes(needle) === true
+  })
+  const selectable = visible.filter(entry => entry.changes.length > 0)
   const toggle = (id: string): void => {
     const next = new Set(selected)
     if (next.has(id)) next.delete(id)
@@ -311,7 +457,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       <div className="cs-row">
         <label className="cs-field">
           <span className="cs-hint">{t('target')}</span>
-          <select className="cs-select" value={targetNs} onChange={(event) => { setTargetNs(event.target.value); setRows(undefined) }}>
+          <select className="cs-select" value={targetNs} onChange={(event) => { showProvider(event.target.value, '') }}>
             {descriptors.filter(entry => Object.keys(providersOf(entry)).length > 0).map(entry => (
               <option key={entry.ns} value={entry.ns}>{entry.ns}</option>
             ))}
@@ -319,11 +465,12 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
         </label>
         <label className="cs-field">
           <span className="cs-hint">{t('provider')}</span>
-          <select className="cs-select" value={providerKey} onChange={(event) => selectProvider(event.target.value)}>
+          <select className="cs-select" value={providerKey} onChange={(event) => { showProvider(targetNs, event.target.value) }}>
             {providerKeys.map(key => <option key={key} value={key}>{key}</option>)}
           </select>
         </label>
         <span className="cs-hint">{t('modelCount', { count: models.length })}</span>
+        <span className="cs-hint">{t('willSort')}</span>
       </div>
 
       {models.length === 0
@@ -337,7 +484,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
               {t('refreshCatalog')}
             </button>
             <label className="cs-hint" title={t('overwriteHint')}>
-              <input type="checkbox" checked={overwrite} onChange={(event) => { setOverwrite(event.target.checked) }} />
+              <input type="checkbox" checked={overwrite} onChange={(event) => { setOverwriteMode(event.target.checked) }} />
               {' '}{t('overwrite')}
             </label>
           </div>
@@ -351,61 +498,104 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       {rows !== undefined && matched.length > 0
         ? (
           <>
-            <table className="cs-table">
-              <thead>
-                <tr>
-                  <th>
-                    <input
-                      type="checkbox"
-                      aria-label={t('selectAll')}
-                      checked={matched.every(row => selected.has(row.id))}
-                      onChange={(event) => {
-                        setSelected(event.target.checked ? new Set(matched.map(row => row.id)) : new Set())
-                      }}
-                    />
-                  </th>
-                  <th>{t('colModel')}</th>
-                  <th>{t('colMatch')}</th>
-                  <th>{t('colContext')}</th>
-                  <th>{t('colOutput')}</th>
-                  <th>{t('colImage')}</th>
-                  <th title={t('colLiveHint')}>{t('colLive')}</th>
-                  <th>{t('colReasoning')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {matched.map((row) => (
-                  <tr key={row.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        aria-label={row.id}
-                        checked={selected.has(row.id)}
-                        onChange={() => { toggle(row.id) }}
-                      />
-                    </td>
-                    <td className="cs-id">{row.id}</td>
-                    <td className="cs-dim">
-                      {row.match === undefined ? '—' : `${row.match.provider}/${row.match.modelId}`}
-                      {' '}<span className="cs-badge">{viaLabel(row, t)}</span>
-                    </td>
-                    <td>{tokens(row.fields?.contextWindow)}</td>
-                    <td>{tokens(row.fields?.maxTokens)}</td>
-                    <td>
-                      <span className={row.fields?.input?.includes('image') === true ? 'cs-badge cs-badge--image' : 'cs-dim'}>
-                        {imageLabel(row.fields, t)}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={liveRows.get(row.id)?.input?.includes('image') === true ? 'cs-badge cs-badge--image' : 'cs-dim'}>
-                        {liveLabel(liveRows.get(row.id), t)}
-                      </span>
-                    </td>
-                    <td className="cs-dim">{reasoningLabel(row.fields)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="cs-row">
+              <input
+                className="cs-input"
+                type="search"
+                value={query}
+                placeholder={t('search')}
+                onChange={(event) => { setQuery(event.target.value) }}
+              />
+              <label className="cs-hint">
+                <input type="checkbox" checked={onlyChanged} onChange={(event) => { setOnlyChanged(event.target.checked) }} />
+                {' '}{t('onlyChanged')}
+              </label>
+              <span className="cs-hint">
+                {changing.length === 0
+                  ? t('noChanges')
+                  : t('changeSummary', { rows: changing.length, fields: changeFields })}
+              </span>
+            </div>
+
+            {visible.length === 0
+              ? <p className="cs-hint">{t('filteredEmpty')}</p>
+              : (
+                <div className="cs-table-wrap">
+                  <table className="cs-table">
+                    <thead>
+                      <tr>
+                        <th>
+                          <input
+                            type="checkbox"
+                            aria-label={t('selectAll')}
+                            checked={selectable.length > 0 && selectable.every(entry => selected.has(entry.row.id))}
+                            onChange={(event) => {
+                              const keep = event.target.checked ? new Set(selectable.map(entry => entry.row.id)) : new Set<string>()
+                              setSelected(keep)
+                            }}
+                          />
+                        </th>
+                        <th>{t('colModel')}</th>
+                        <th>{t('colMatch')}</th>
+                        <th>{t('colContext')}</th>
+                        <th>{t('colOutput')}</th>
+                        <th>{t('colImage')}</th>
+                        <th title={t('colLiveHint')}>{t('colLive')}</th>
+                        <th>{t('colReasoning')}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visible.map(({ row, model, changes }) => {
+                        const changeOf = (key: keyof CapabilityFields): FieldChange | undefined =>
+                          changes.find(change => change.key === key)
+                        const nameChange = changeOf('name')
+                        return (
+                          <tr key={row.id} className={changes.length > 0 ? 'cs-row--changed' : undefined}>
+                            <td>
+                              <input
+                                type="checkbox"
+                                aria-label={row.id}
+                                checked={selected.has(row.id)}
+                                disabled={changes.length === 0}
+                                onChange={() => { toggle(row.id) }}
+                              />
+                            </td>
+                            <td className="cs-id">
+                              {row.id}
+                              {nameChange === undefined
+                                ? null
+                                : (
+                                  <div className="cs-sub">
+                                    <span className="cs-from">{String(nameChange.before)}</span>
+                                    {' → '}{String(nameChange.after)}
+                                  </div>
+                                )}
+                            </td>
+                            <td className="cs-dim">
+                              {row.match === undefined ? '—' : `${row.match.provider}/${row.match.modelId}`}
+                              {' '}<span className="cs-badge">{viaLabel(row, t)}</span>
+                            </td>
+                            <td>{valueCell(changeOf('contextWindow'), model.contextWindow, tokens)}</td>
+                            <td>{valueCell(changeOf('maxTokens'), model.maxTokens, tokens)}</td>
+                            <td>
+                              {valueCell(changeOf('input'), model.input, value => imageText(value, t))}
+                            </td>
+                            <td>
+                              <span className={liveRows.get(row.id)?.input?.includes('image') === true ? 'cs-badge cs-badge--image' : 'cs-dim'}>
+                                {liveLabel(liveRows.get(row.id), t)}
+                              </span>
+                            </td>
+                            <td className="cs-dim">
+                              {valueCell(changeOf('reasoningEfforts'), model.reasoningEfforts, reasoningText)}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
             {liveRows.size > 0
               ? <p className="cs-hint">{t('liveSummary', { image: liveImage, text: liveText })}</p>
               : null}
@@ -413,7 +603,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
               <button
                 type="button"
                 className="cs-button cs-button--primary"
-                disabled={busy !== 'idle' || selected.size === 0}
+                disabled={busy !== 'idle' || !changing.some(entry => selected.has(entry.row.id))}
                 onClick={() => { void applyRows() }}
               >
                 {busy === 'applying' ? t('applying') : t('apply')}
@@ -428,7 +618,12 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
           <div>
             <p className="cs-hint">{t('unmatchedHint')}</p>
             <ul className="cs-unmatched">
-              {unmatched.map(row => <li key={row.id}>{row.id}</li>)}
+              {unmatched.map(entry => (
+                <li key={entry.row.id}>
+                  {entry.row.id}
+                  {entry.row.reason === undefined ? null : <span className="cs-dim"> — {entry.row.reason}</span>}
+                </li>
+              ))}
             </ul>
           </div>
         )
