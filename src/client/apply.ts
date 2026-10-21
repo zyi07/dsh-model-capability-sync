@@ -9,7 +9,7 @@
  * @module dsh-model-capability-sync/client
  */
 import type { RpcEnvelope } from '../types.ts'
-import type { PreviewRequest, PreviewResponse } from '../types.ts'
+import type { LiveResponse, PreviewRequest, PreviewResponse } from '../types.ts'
 import { SyncSection } from './SyncSection.tsx'
 import type { SettingsDescriptor, SettingsPathOp, SyncSectionInjected } from './SyncSection.tsx'
 import { en, zh } from './locale.ts'
@@ -169,6 +169,8 @@ export function apply(ctx: ClientContext): void {
   const injected = (): SyncSectionInjected => ({
     preview: request =>
       connection.rpc.call(CHANNEL, 'preview', request) as Promise<RpcEnvelope<PreviewResponse>>,
+    live: request =>
+      connection.rpc.call(CHANNEL, 'live', request) as Promise<RpcEnvelope<LiveResponse>>,
     describeSettings: async () => namespacesOf(await remote.settings.describe()),
     mutateSettings: async (ns, ops, expectedRevision) => {
       const view = unwrap(await remote.settings.mutate(ns, ops, expectedRevision)) as SettingsDescriptor | undefined

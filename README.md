@@ -28,6 +28,11 @@
 - 写入走**官方 settings 服务**（`remote.settings.mutate`），落点是 profile 的
   `cordis.patch.yml`，热生效，不用重启。
 - 默认**只填空白字段**：你手填过的值不会被改写，除非勾选「覆盖已有值」。
+  空白包括 `undefined`、`''`、`[]`、`{}` —— 配置 schema 会给没填的字段补默认值
+  （例如没声明 `input` 会读成 `[]`），这些默认值不算「你填过」。
+- 表里有两列图片：**「图片」= 目录声明将写入的值，「当前生效」= 真正接管这条路由的
+  适配器此刻上报的值**（也就是聊天请求看到的）。两列不一致，说明同一个 provider
+  路由被另一个插件抢占，写这份配置不会生效。
 - 匹配规则由严到松：别名 → 精确 → 忽略大小写 → 去供应商前缀 → 去变体后缀
   （`-high/-low/-medium/-thinking/-preview`）。优先选**第一方厂商**的目录条目，
   避免被聚合站的错误数字带偏。
@@ -44,7 +49,7 @@ dsh plugin --profile desktop add "link:D:/code/dsh-model-capability-sync"
 
 | 路径 | 用途 |
 | --- | --- |
-| `src/index.ts` | 宿主半：RPC 通道 `preview` |
+| `src/index.ts` | 宿主半：RPC 通道 `preview`（目录能力）+ `live`（当前生效） |
 | `src/catalog.ts` | models.dev 下载 / 缓存 / 索引 |
 | `src/match.ts` | 网关 id → 目录条目的匹配规则 |
 | `src/mapping.ts` | 目录条目 → 能力字段（纯函数） |

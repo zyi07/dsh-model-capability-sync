@@ -60,3 +60,31 @@
 ### 待验证
 
 - 页面需刷新一次（只改了浏览器半，宿主半未变，不必重启应用）。
+
+### 第二个缺陷：`input: []` 被当成「已填过」（已修）
+
+- 现象：点「应用」后 `contextWindow` / `maxTokens` / `reasoningEfforts` 都写进去了，
+  但 74 个模型里 73 个的 `input` 还是 `[]`，只有默认模型 `work-gj/deepseek-v4.1-flash`
+  拿到了 `[text, image]`。
+- 原因：配置 schema 会给没声明的字段补默认值，`input` 的默认值是 `[]`。
+  我原来的「只填空白字段」只把 `undefined` 当空白，于是 `[]` 被当成「你已经填过了」，
+  直接跳过。唯一被写进去的那个模型，恰好是 describe 里连 `input` 键都没有的。
+- 修复：`mergeModel` 的空白判定改为 `isBlank()` —— `undefined` / `''` / `[]` / `{}` 都算空白；
+  `false` 和 `0` 是明确决定，不算空白。
+- 影响面：只会多填「本来就是空」的字段，你手填过的非空值仍然不会被改。
+
+### 新增「当前生效」诊断列（`live` 端点）
+
+- 动机：配置文件写对了，聊天仍然可能报「不支持图片」——因为 `newapi` 这个 provider
+  路由可能被另一个插件抢先注册（`dsh-llm-newapi` 与 `llm-pi-ai` 都声明 `newapi`，
+  `dsh-llm` 对同一路由第二次注册会抛 `DUPLICATE_ADAPTER`，只有先注册的那个生效）。
+  配置属于 pi-ai、路由却由 llm-newapi 服务时，写进去的 `input` 完全不参与请求。
+- 实现：宿主新增 `live` 端点，用 `ctx.llm.resolveModelInfo(provider, model)` 读
+  **真正接管该路由的适配器**此刻上报的 `inputModalities` / `contextWindow` / `defaultMaxTokens`；
+  页面在「分析」时顺带取一次，新增「当前生效」列和一行汇总。
+- 判读：两列一致 = 写进去就生效；不一致 = 路由被别的插件占着，必须停用那个插件。
+
+### 下一步（等确认）
+
+- P4：停用 `dsh-llm-newapi`（bundle + patch 条目），让 `llm-pi-ai` 独占 `newapi` 路由，
+  图片能力才会真正进入请求链路。

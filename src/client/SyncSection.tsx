@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import type { CapabilityFields, PreviewResponse, PreviewRow, RpcEnvelope } from '../types.ts'
+import type { CapabilityFields, LiveResponse, LiveRow, PreviewResponse, PreviewRow, RpcEnvelope } from '../types.ts'
 
 /** One settings descriptor as the remote reports it (only the fields used here). */
 export interface SettingsDescriptor {
@@ -26,6 +26,7 @@ export interface SettingsPathOp {
 /** What `apply` injects into this component. */
 export interface SyncSectionInjected {
   preview(request: { ids: string[]; aliases?: Record<string, string>; refresh?: boolean }): Promise<RpcEnvelope<PreviewResponse>>
+  live(request: { provider: string; ids: string[] }): Promise<RpcEnvelope<LiveResponse>>
   describeSettings(): Promise<SettingsDescriptor[]>
   mutateSettings(ns: string, ops: SettingsPathOp[], expectedRevision?: number): Promise<SettingsDescriptor>
 }
@@ -96,6 +97,23 @@ function viaLabel(row: PreviewRow, t: SyncSectionProps['t']): string {
 }
 
 /**
+ * Whether a stored value carries no decision of its own.
+ *
+ * The provider schema materializes defaults, so a field the user never set can
+ * arrive as `[]` or `{}` rather than as `undefined`. Treating those as "already
+ * set" is what made an empty `input: []` survive every fill — the field looked
+ * answered while it said nothing. `false` and `0` are decisions, not blanks.
+ * @param value - the stored value.
+ * @returns true when filling the field loses no user intent.
+ */
+function isBlank(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true
+  if (Array.isArray(value)) return value.length === 0
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0
+  return false
+}
+
+/**
  * Merge one row's capability fields into an existing model entry.
  * @param model - the entry as stored.
  * @param fields - catalog capabilities.
@@ -106,10 +124,18 @@ function mergeModel(model: ModelDraft, fields: CapabilityFields, overwrite: bool
   const next: ModelDraft = { ...model }
   for (const [key, value] of Object.entries(fields)) {
     if (value === undefined) continue
-    if (!overwrite && next[key] !== undefined) continue
+    if (!overwrite && !isBlank(next[key])) continue
     next[key] = value
   }
   return next
+}
+
+/** The image verdict the owning adapter reports right now. */
+function liveLabel(row: LiveRow | undefined, t: SyncSectionProps['t']): string {
+  if (row === undefined) return '—'
+  if (row.error !== undefined) return t('liveError')
+  if (row.input === undefined) return '—'
+  return row.input.includes('image') ? t('imageYes') : t('imageNo')
 }
 
 /**
@@ -118,7 +144,7 @@ function mergeModel(model: ModelDraft, fields: CapabilityFields, overwrite: bool
  * @returns the section body.
  */
 export function SyncSection(props: SyncSectionProps): ReactNode {
-  const { t, preview, describeSettings, mutateSettings } = props
+  const { t, preview, live, describeSettings, mutateSettings } = props
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [errorText, setErrorText] = useState<string | undefined>(undefined)
   const [descriptors, setDescriptors] = useState<SettingsDescriptor[]>([])
@@ -126,6 +152,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const [providerKey, setProviderKey] = useState('')
   const [models, setModels] = useState<ModelDraft[]>([])
   const [rows, setRows] = useState<PreviewRow[] | undefined>(undefined)
+  const [liveRows, setLiveRows] = useState<ReadonlyMap<string, LiveRow>>(new Map())
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [overwrite, setOverwrite] = useState(false)
   const [busy, setBusy] = useState<'idle' | 'analyzing' | 'applying'>('idle')
@@ -152,6 +179,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       setProviderKey(firstKey)
       setModels(modelsOf(providers[firstKey]))
       setRows(undefined)
+      setLiveRows(new Map())
       setSelected(new Set())
       setStatus('ready')
     } catch (error) {
@@ -168,6 +196,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     setProviderKey(key)
     setModels(modelsOf(providersOf(descriptor)[key]))
     setRows(undefined)
+    setLiveRows(new Map())
     setSelected(new Set())
     setNotice(undefined)
   }
@@ -187,6 +216,15 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
         models: result.value.catalogModels,
         time: new Date(result.value.fetchedAt).toLocaleString(),
       }))
+      // Ask the adapter that owns this route what a request sees right now.
+      // The entry we are about to write may not be the one serving it, so this
+      // is the only honest answer to "did the write take effect".
+      try {
+        const answer = await live({ provider: providerKey, ids })
+        setLiveRows(answer.ok ? new Map(answer.value.rows.map(row => [row.id, row])) : new Map())
+      } catch {
+        setLiveRows(new Map())
+      }
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : String(error))
     } finally {
@@ -249,6 +287,11 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const providerKeys = Object.keys(providersOf(descriptor))
   const unmatched = (rows ?? []).filter(row => row.fields === undefined)
   const matched = (rows ?? []).filter(row => row.fields !== undefined)
+  const liveImage = matched.filter(row => liveRows.get(row.id)?.input?.includes('image') === true).length
+  const liveText = matched.filter((row) => {
+    const answer = liveRows.get(row.id)
+    return answer?.input !== undefined && !answer.input.includes('image')
+  }).length
   const toggle = (id: string): void => {
     const next = new Set(selected)
     if (next.has(id)) next.delete(id)
@@ -320,6 +363,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
                   <th>{t('colContext')}</th>
                   <th>{t('colOutput')}</th>
                   <th>{t('colImage')}</th>
+                  <th title={t('colLiveHint')}>{t('colLive')}</th>
                   <th>{t('colReasoning')}</th>
                 </tr>
               </thead>
@@ -346,11 +390,19 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
                         {imageLabel(row.fields, t)}
                       </span>
                     </td>
+                    <td>
+                      <span className={liveRows.get(row.id)?.input?.includes('image') === true ? 'cs-badge cs-badge--image' : 'cs-dim'}>
+                        {liveLabel(liveRows.get(row.id), t)}
+                      </span>
+                    </td>
                     <td className="cs-dim">{reasoningLabel(row.fields)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {liveRows.size > 0
+              ? <p className="cs-hint">{t('liveSummary', { image: liveImage, text: liveText })}</p>
+              : null}
             <div className="cs-row">
               <button
                 type="button"

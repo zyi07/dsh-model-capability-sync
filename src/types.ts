@@ -81,3 +81,36 @@ export interface PreviewResponse {
 export type RpcEnvelope<T> =
   | { ok: true; value: T }
   | { ok: false; error: { code: string; message: string; details?: Record<string, unknown> } }
+
+/**
+ * What the harness resolves for one model id right now, read from the adapter
+ * that actually owns the route. This is the truth a chat request sees, which
+ * is not necessarily the configuration this plugin writes: two plugins may
+ * claim the same provider route, and only one of them serves it.
+ */
+export interface LiveRow {
+  /** The model id as configured. */
+  id: string
+  /** Input modalities the owning adapter reports, when it reports any. */
+  input?: string[]
+  /** Context window the owning adapter reports. */
+  contextWindow?: number
+  /** Default output cap the owning adapter reports. */
+  maxTokens?: number
+  /** Why the live lookup failed, when it did. */
+  error?: string
+}
+
+/** Request payload of the `live` RPC endpoint. */
+export interface LiveRequest {
+  /** Provider route to inspect (the key inside `providers`). */
+  provider: string
+  /** Model ids to resolve through the owning adapter. */
+  ids: string[]
+}
+
+/** Response payload of the `live` RPC endpoint. */
+export interface LiveResponse {
+  /** One row per requested id, in request order. */
+  rows: LiveRow[]
+}

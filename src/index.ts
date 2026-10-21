@@ -12,13 +12,13 @@ import { loadCatalog } from './catalog.ts'
 import type { Catalog } from './catalog.ts'
 import { capabilitiesOf } from './mapping.ts'
 import { matchModel } from './match.ts'
-import type { PreviewRequest, PreviewResponse, PreviewRow, RpcEnvelope } from './types.ts'
+import type { LiveRequest, LiveResponse, LiveRow, PreviewRequest, PreviewResponse, PreviewRow, RpcEnvelope } from './types.ts'
 
 /** Cordis plugin name; the profile entry id matches. */
 export const name = 'model-capability-sync'
 
 /** The channel is served over the web server, so both services are required. */
-export const inject = ['connection', 'webServer']
+export const inject = ['connection', 'webServer', 'llm']
 
 /** Own RPC channel; the browser half calls this exact path. */
 const CHANNEL = '/model-capability-sync'
@@ -65,28 +65,83 @@ function failure(message: string): RpcEnvelope<never> {
   return { ok: false, error: { code: 'internal', message, details: {} } }
 }
 
-const handler: Handler = async (endpoint, payload, signal) => {
-  try {
-    if (endpoint === 'preview') {
-      return { ok: true, value: await preview(payload as PreviewRequest, signal) }
+/** The LLM registry face this half reads live model metadata through. */
+interface LlmFace {
+  resolveModelInfo(provider: string, model: string, signal?: AbortSignal): Promise<{
+    inputModalities?: readonly string[]
+    context?: { contextWindow: number }
+    defaultMaxTokens?: number
+  }>
+}
+
+/**
+ * Read what the adapter that owns `provider` reports right now.
+ *
+ * A configuration entry and the route a chat request takes can disagree: two
+ * plugins may claim one provider route, and only the first registration serves
+ * it. This answer is what a request would see, so a filled-in `input` that
+ * never takes effect becomes visible instead of inferred.
+ * @param llm - the LLM registry.
+ * @param request - route and model ids to resolve.
+ * @param signal - cancellation for adapter-owned lookups.
+ * @returns one row per requested id, in request order.
+ */
+async function live(llm: LlmFace, request: LiveRequest, signal: AbortSignal): Promise<LiveResponse> {
+  const provider = typeof request.provider === 'string' ? request.provider : ''
+  const ids = Array.isArray(request.ids) ? request.ids.filter(id => typeof id === 'string' && id.length > 0) : []
+  const rows: LiveRow[] = []
+  for (const id of ids) {
+    try {
+      const info = await llm.resolveModelInfo(provider, id, signal)
+      rows.push({
+        id,
+        ...info.inputModalities === undefined ? {} : { input: [...info.inputModalities] },
+        ...info.context === undefined ? {} : { contextWindow: info.context.contextWindow },
+        ...info.defaultMaxTokens === undefined ? {} : { maxTokens: info.defaultMaxTokens },
+      })
+    } catch (error) {
+      rows.push({ id, error: error instanceof Error ? error.message : String(error) })
     }
-    return failure(`model-capability-sync: unknown endpoint ${JSON.stringify(endpoint)}`)
-  } catch (error) {
-    return failure(error instanceof Error ? error.message : String(error))
+  }
+  return { rows }
+}
+
+/**
+ * Build the channel handler bound to one LLM registry.
+ * @param llm - the LLM registry the `live` endpoint reads through, when present.
+ * @returns the endpoint dispatcher.
+ */
+function createHandler(llm: LlmFace | undefined): Handler {
+  return async (endpoint, payload, signal) => {
+    try {
+      if (endpoint === 'preview') {
+        return { ok: true, value: await preview(payload as PreviewRequest, signal) }
+      }
+      if (endpoint === 'live') {
+        if (llm === undefined) return failure('model-capability-sync: no llm service to resolve the live route')
+        return { ok: true, value: await live(llm, payload as LiveRequest, signal) }
+      }
+      return failure(`model-capability-sync: unknown endpoint ${JSON.stringify(endpoint)}`)
+    } catch (error) {
+      return failure(error instanceof Error ? error.message : String(error))
+    }
   }
 }
 
 /**
  * Register the channel. The registration rides the calling fiber, so a plugin
  * reload removes the route with it.
- * @param ctx - host context carrying `connection` and `webServer`.
+ * @param ctx - host context carrying `connection`, `webServer` and `llm`.
  */
 export function apply(ctx: HostContext): void {
   const connection = ctx.get('connection')
+  const llm = ctx.get('llm') as LlmFace | undefined
   if (connection === undefined) {
     ctx.logger.warn('model-capability-sync: no connection service; the capability channel is unavailable')
     return
   }
+  if (llm === undefined) ctx.logger.warn('model-capability-sync: no llm service; the live route check is unavailable')
   const registrar = connection as Registrar
+  const handler = createHandler(llm)
   ctx.effect(() => registrar.register(ctx, CHANNEL, handler), 'model-capability-sync: RPC channel')
 }
