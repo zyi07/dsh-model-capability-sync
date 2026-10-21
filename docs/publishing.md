@@ -53,34 +53,43 @@ dsh plugin --profile web add dsh-model-capability-sync   # 换一个干净 profi
 
 插件市场 `dshmarket` 的列表来自
 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)。
-**去那个仓库提 PR，加一条记录**；站点与市场会自动收录（通常一天内）。
-不要往 `dsh-market/dsh-market`（市场应用本身）或 `dsh-plugin-catalog`
-（自动生成的产物）提 PR。
+投稿方式是 **一个插件一个 YAML 文件**，文件名 `data/plugins/<owner>__<repo>.yml`
+（README 是脚本生成的，不要手改；也不要往 `dsh-market/dsh-market` 或
+`dsh-plugin-catalog` 提 PR，那两个分别是市场应用和自动生成的产物）。
 
-条目形状取自目录里真实的记录（`dsh-plugin-catalog` 的 `plugins.json`，
-2026-10-21 共 6254 条）。**只需要手填这几个字段**，其余由构建脚本生成：
+要提交的文件内容：
 
-```json
-{
-  "name": "dsh-model-capability-sync",
-  "owner": "zyi07",
-  "url": "https://github.com/zyi07/dsh-model-capability-sync",
-  "category": "model",
-  "npm": "dsh-model-capability-sync",
-  "description": {
-    "en": "Fill context window, output cap, image input and reasoning efforts from models.dev into your configured DeepSeek Harness LLM provider. Configuration only — no inference request is sent, and every change is previewed field by field before it is written.",
-    "zh": "从 models.dev 查询你已配置模型的上下文窗口、输出上限、是否支持图片、推理档位，写入 DSH 的 LLM 供应商配置。只写配置，不发推理请求；写入前逐字段预览差异。"
-  }
-}
+```yaml
+# data/plugins/zyi07__dsh-model-capability-sync.yml
+url: https://github.com/zyi07/dsh-model-capability-sync
+name: zyi07/dsh-model-capability-sync
+category: model
+description:
+  en: 'Fills context window, output cap, image input and reasoning efforts from models.dev into an already-configured DeepSeek Harness LLM provider, previewing every field change before writing.'
+  zh: '从 models.dev 为已配置的 DeepSeek Harness LLM 供应商补齐上下文窗口、输出上限、图片输入与推理档位，写入前逐字段预览差异。'
 ```
 
-- `category` 用 `model`（Models & Providers / 模型与账号接入）。可选分类 id：
+- `category` 用 `model`（Models & Providers / 模型与账号接入）。可选值：
   `agi, ui, usage, theme, model, identity, session, memory, tools, wsl, browser,
   vision, voice, docs, skill, workflow, git, notify, dev, security, remote, market, fun`。
-- `page`、`version`、`stars`、`downloads`、`capabilities` 等字段由构建脚本抓取，
-  不要手写。
-- 收录后会出现在两处：站点 `https://awesome-dsh-plugin.com/p/zyi07/dsh-model-capability-sync/`，
-  以及插件市场（`index.json` 格式 1 索引，DSH 0.2.1+ 的「插件 → 发现」读的就是它）。
+- 描述里出现 `: `（冒号加空格）必须加引号，否则 YAML 解析失败。
+- 描述必须**属实**，维护者会拿它跟代码核对；不要写营销词。
+
+提交前逐条对照他们的硬性要求：
+
+| 要求 | 本仓库 |
+| --- | --- |
+| `package.json` 声明 `dsh.bundle`（只有 `dsh.client` 不算） | ✅ |
+| 仓库根有 `cordis.patch.yml` 且是 `insert` 形式 | ✅ |
+| 有真实可用的代码 | ✅ |
+| **仓库创建满 1 天**（CI 自动检查） | ⏳ 2026-10-21 16:52 建库，**2026-10-22 16:52 之后**才合格 |
+| 仓库加 `dsh-plugin` topic | ⬜ 在仓库 About 里添加 |
+| 描述属实、分类贴合 | ✅ |
+| 官方 `@deepseek-ai/*` 用 `peerDependencies` 而不是 `dependencies` | ✅ |
+| 发布到 npm（预构建安装可跳过 `allowBuilds` 构建授权） | ✅ 0.1.0 |
+
+收录后会出现在两处：站点 `https://awesome-dsh-plugin.com/p/zyi07/dsh-model-capability-sync/`，
+以及插件市场（`index.json` 格式 1 索引，DSH 0.2.1+ 的「插件 → 发现」读的就是它）。
 
 ### 5.2 自建市场索引（备用）
 

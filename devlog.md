@@ -201,3 +201,17 @@
 - 本机到 `raw.githubusercontent.com`、`cdn.jsdelivr.net`、以及后来的 `github.com`
   clone 都不稳定（推自己的仓库能成功，clone 别人的仓库超时），所以 PR 交给维护者在
   网页上提。
+
+### 社区目录投稿方式核实（2026-10-21）
+
+- 拉下 `awesome-dsh-plugin` 仓库读了 `contributing.md`：投稿是**一个插件一个 YAML**
+  （`data/plugins/<owner>__<repo>.yml`），不是改 README；README 由脚本生成。
+- 两条硬性门槛我们还没过：
+  1. **仓库创建满 1 天**（CI 自动查）。本仓库建于 2026-10-21 16:52 (+08:00)，
+     所以 **2026-10-22 16:52 之后**才能提。
+  2. **仓库要加 `dsh-plugin` topic**（仓库 About 里设置）。
+- 其余要求都满足：`dsh.bundle` + `cordis.patch.yml`、真实代码、分类 `model`、
+  官方包用 `peerDependencies`、已发布 npm（预构建安装可跳过 `allowBuilds`）。
+- 已把 YAML 内容与对照表写进 `docs/publishing.md` 5.1。
+- 网络：github.com 直连会超时，走本机代理 `http://127.0.0.1:7890` 才通
+  （`git -c http.proxy=... push`）。
