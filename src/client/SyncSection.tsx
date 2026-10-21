@@ -42,6 +42,35 @@ type ModelDraft = Record<string, unknown>
 /** The official adapter this plugin fills capabilities into. */
 const TARGET_DEFAULT = 'llm-pi-ai'
 
+/**
+ * How a writable settings namespace reads to a person.
+ *
+ * A namespace id is an internal identity, so the page names the thing it
+ * configures instead. Provenance is a table, not a guess: the client cannot
+ * see which package owns a namespace (`settings.describe` reports only
+ * `ns/revision/value/base/user`), and inferring "official" from an `llm-`
+ * prefix would eventually mislabel a third-party plugin. A namespace this
+ * table does not know is shown as a plugin, with its id.
+ */
+const TARGET_DIRECTORY: Record<string, { native: boolean; nameKey: string }> = {
+  'llm-pi-ai': { native: true, nameKey: 'nameLlmPiAi' },
+  'llm-deepseek': { native: true, nameKey: 'nameLlmDeepseek' },
+  'llm-deepseek-account': { native: true, nameKey: 'nameLlmDeepseekAccount' },
+  'llm-newapi': { native: false, nameKey: 'nameLlmNewapi' },
+}
+
+/**
+ * Render one namespace as provenance plus a name.
+ * @param ns - the settings namespace id.
+ * @param t - the bound translate function.
+ * @returns copy such as `原生配置 · pi-ai`, never a bare namespace id.
+ */
+function targetLabelOf(ns: string, t: SyncSectionProps['t']): string {
+  const known = TARGET_DIRECTORY[ns]
+  if (known === undefined) return `${t('sourcePlugin')} · ${ns}`
+  return `${known.native ? t('sourceNative') : t('sourcePlugin')} · ${t(known.nameKey)}`
+}
+
 /** One capability field that applying a row would rewrite. */
 interface FieldChange {
   key: keyof CapabilityFields
@@ -423,6 +452,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   }
 
   const descriptor = descriptors.find(entry => entry.ns === targetNs)
+  const candidates = descriptors.filter(entry => Object.keys(providersOf(entry)).length > 0)
   const providerKeys = Object.keys(providersOf(descriptor))
   const needle = query.trim().toLowerCase()
   const visible = matched.filter((entry) => {
@@ -444,14 +474,23 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       <p className="cs-hint">{t('intro')}</p>
 
       <div className="cs-row">
-        <label className="cs-field">
-          <span className="cs-hint">{t('target')}</span>
-          <select className="cs-select" value={targetNs} onChange={(event) => { showProvider(event.target.value, '') }}>
-            {descriptors.filter(entry => Object.keys(providersOf(entry)).length > 0).map(entry => (
-              <option key={entry.ns} value={entry.ns}>{entry.ns}</option>
-            ))}
-          </select>
-        </label>
+        {candidates.length > 1
+          ? (
+            <label className="cs-field">
+              <span className="cs-hint">{t('writeTarget')}</span>
+              <select className="cs-select" value={targetNs} onChange={(event) => { showProvider(event.target.value, '') }}>
+                {candidates.map(entry => (
+                  <option key={entry.ns} value={entry.ns}>{targetLabelOf(entry.ns, t)}</option>
+                ))}
+              </select>
+            </label>
+          )
+          : (
+            <div className="cs-field" title={targetNs}>
+              <span className="cs-hint">{t('writeTarget')}</span>
+              <span className="cs-target">{targetLabelOf(targetNs, t)}</span>
+            </div>
+          )}
         <label className="cs-field">
           <span className="cs-hint">{t('provider')}</span>
           <select className="cs-select" value={providerKey} onChange={(event) => { showProvider(targetNs, event.target.value) }}>

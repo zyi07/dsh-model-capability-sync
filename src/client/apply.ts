@@ -149,6 +149,7 @@ const SECTION_CSS = `
   color: var(--dsw-alias-label-primary);
   font: inherit; font-size: 13px;
 }
+.cs-target { font-size: 13px; color: var(--dsw-alias-label-primary); line-height: 30px; }
 .cs-table-wrap {
   max-height: 460px; overflow: auto; margin-bottom: 12px;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
