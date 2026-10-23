@@ -17,15 +17,21 @@ test('sourcePrefixOf reads the first path segment', () => {
   assert.equal(sourcePrefixOf('/leading'), '')
 })
 
-test('redirectName appends the prefix in parentheses', () => {
+test('redirectName appends the prefix in full-width brackets', () => {
   const row = redirectName('qoder/qfmodel', 'Qwen3.8-Flash')
-  assert.deepEqual(row, { prefix: 'qoder', before: 'Qwen3.8-Flash', after: 'Qwen3.8-Flash (qoder)', changed: true })
+  assert.deepEqual(row, { prefix: 'qoder', before: 'Qwen3.8-Flash', after: 'Qwen3.8-Flash【qoder】', changed: true })
 })
 
 test('redirectName is idempotent', () => {
-  const row = redirectName('qoder/qfmodel', 'Qwen3.8-Flash (qoder)')
-  assert.equal(row.after, 'Qwen3.8-Flash (qoder)')
+  const row = redirectName('qoder/qfmodel', 'Qwen3.8-Flash【qoder】')
+  assert.equal(row.after, 'Qwen3.8-Flash【qoder】')
   assert.equal(row.changed, false)
+})
+
+test('redirectName normalizes the earlier half-width spelling', () => {
+  const row = redirectName('qoder/qfmodel', 'Qwen3.8-Flash (qoder)')
+  assert.equal(row.after, 'Qwen3.8-Flash【qoder】')
+  assert.equal(row.changed, true)
 })
 
 test('redirectName leaves ids without a prefix alone', () => {
@@ -37,7 +43,7 @@ test('redirectName leaves ids without a prefix alone', () => {
 test('redirectName falls back to the bare id when the name is blank', () => {
   const row = redirectName('qoder/unnamed', '')
   assert.equal(row.before, 'qoder/unnamed')
-  assert.equal(row.after, 'unnamed (qoder)')
+  assert.equal(row.after, 'unnamed【qoder】')
 })
 
 test('same-name models from different sources become distinguishable', () => {
@@ -45,18 +51,18 @@ test('same-name models from different sources become distinguishable', () => {
     { id: 'qoder/qfmodel', name: 'Qwen3.8-Flash' },
     { id: 'qoder-cn/qfmodel', name: 'Qwen3.8-Flash' },
   ])
-  assert.deepEqual(rows.map(row => row.after), ['Qwen3.8-Flash (qoder)', 'Qwen3.8-Flash (qoder-cn)'])
+  assert.deepEqual(rows.map(row => row.after), ['Qwen3.8-Flash【qoder】', 'Qwen3.8-Flash【qoder-cn】'])
 })
 
 test('renameModels only touches selected ids that actually change', () => {
   const models = [
     { id: 'qoder/qfmodel', name: 'Qwen3.8-Flash', contextWindow: 128000 },
-    { id: 'unknown/m1', name: 'already (unknown)' },
+    { id: 'unknown/m1', name: 'already【unknown】' },
   ]
   const { next, written } = renameModels(models, new Set(['qoder/qfmodel', 'unknown/m1']))
   assert.equal(written, 1)
-  assert.equal(next[0].name, 'Qwen3.8-Flash (qoder)')
+  assert.equal(next[0].name, 'Qwen3.8-Flash【qoder】')
   assert.equal(next[0].contextWindow, 128000, 'untouched fields survive')
-  assert.equal(next[1].name, 'already (unknown)')
+  assert.equal(next[1].name, 'already【unknown】')
   assert.equal(models[0].name, 'Qwen3.8-Flash', 'input is not mutated')
 })

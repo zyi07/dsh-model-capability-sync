@@ -10,9 +10,10 @@
  * chatting.
  *
  * The rule here is deliberately mechanical: take the first path segment of the
- * id, drop an identical trailing `(prefix)` if the name already carries one,
- * then append `(prefix)`. Re-running the rule is a no-op, so a second apply
- * never stacks suffixes on top of each other.
+ * id, drop an identical trailing 【prefix】 if the name already carries one
+ * (including the earlier half-width `(prefix)` spelling), then append
+ * 【prefix】. Re-running the rule is a no-op, so a second apply never stacks
+ * suffixes on top of each other.
  *
  * This module is pure: no settings access, no React. The section renders the
  * plan and writes it through the official settings service.
@@ -65,6 +66,10 @@ function bareIdOf(id: string): string {
 
 /**
  * Compute the redirected name for one model.
+ *
+ * The suffix uses full-width brackets — `【qoder】` — because a model label is
+ * already dense with ASCII (`Qwen3.8-Flash (0305)`), and another pair of ASCII
+ * parentheses would read as part of the upstream's own name.
  * @param id - the gateway model id exactly as configured.
  * @param name - the stored display name; the empty string when it is unset.
  * @returns the prefix, both labels, and whether the write changes anything.
@@ -73,10 +78,14 @@ export function redirectName(id: string, name: string): Omit<NameRow, 'id'> {
   const prefix = sourcePrefixOf(id)
   const before = name !== '' ? name : id
   if (prefix === '') return { prefix, before, after: before, changed: false }
-  const suffix = ` (${prefix})`
-  // Strip our own previous suffix first, so applying twice is a no-op.
-  const stripped = name.endsWith(suffix) ? name.slice(0, -suffix.length) : name
-  const base = stripped !== '' ? stripped : bareIdOf(id)
+  const suffix = `【${prefix}】`
+  // Strip our own previous suffix first, so applying twice is a no-op. The
+  // half-width `(prefix)` shape is stripped too: it was an earlier spelling of
+  // this same rule, and normalizing it costs one more endsWith check.
+  let stripped = name.endsWith(suffix) ? name.slice(0, -suffix.length) : name
+  const legacy = ` (${prefix})`
+  if (stripped.endsWith(legacy)) stripped = stripped.slice(0, -legacy.length)
+  const base = stripped.trimEnd() !== '' ? stripped.trimEnd() : bareIdOf(id)
   const after = `${base}${suffix}`
   return { prefix, before, after, changed: after !== before }
 }
