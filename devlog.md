@@ -8,6 +8,13 @@
 - 改进 `src/sort.ts` `redirectedLabel`：改为递归剥除**所有**尾部括号对，排序键从此干净无污染。
 - 测试调整（bare ID 作为 name 保留 `/`）；26/26 全绿；新 bundle 已部署；提交 `74b0cd2 fix: strip all trailing brackets…`。
 
+### 自动重定向 + 【other】分组
+
+- 用户需求（m00810）："以后所有的模型都自动重定向名称，有前缀的把前缀当供应商，没前缀的先判断，判断不出来放到【other】组内"。
+- 改动：不再需要用户手动选择"重定向"。`redirectName` 改为**必定**返回 changed=true（无前缀时用'other'）；【】放在名称**前面**而非后面；所有 26 个测试更新。
+- 排序也自动按新前缀分组：【cline】【other】【qoder】…… vendor 字母序。
+- 提交 `fdc7fa5 refactor: auto-apply name redirect to all models, with 【other】 for no-prefix`。
+
 ### 供应商分组排序
 
 - 用户反馈（m00746）：现有排序按名称字母序，但应该按【】里面的供应商（vendor）排序，同一供应商的模型聚在一起。
