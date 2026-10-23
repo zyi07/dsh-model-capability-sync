@@ -17,14 +17,14 @@ const models = [
 const idsOf = (list) => list.map(model => model.id)
 
 test('redirectedSortKey extracts vendor and model name', () => {
-  const key1 = redirectedSortKey('qoder/qfmodel', 'Qwen3.8-Flash【qoder】')
+  const key1 = redirectedSortKey('qoder/qfmodel', '【qoder】 Qwen3.8-Flash')
   assert.deepEqual(key1, ['qoder', 'qwen3.8-flash'])
   
-  const key2 = redirectedSortKey('workbuddy-ai/model', 'GLM-5.3-Flash (Max) [workbuddy-ai]')
+  const key2 = redirectedSortKey('workbuddy-ai/model', '【workbuddy-ai】 GLM-5.3-Flash (Max)')
   assert.deepEqual(key2, ['workbuddy-ai', 'glm-5.3-flash (max)'])
   
-  const key3 = redirectedSortKey('standalone', 'My Model')
-  assert.deepEqual(key3, ['', 'my model'])
+  const key3 = redirectedSortKey('standalone', '【other】 My Model')
+  assert.deepEqual(key3, ['other', 'my model'])
 })
 
 test('prefix order groups by vendor first', () => {

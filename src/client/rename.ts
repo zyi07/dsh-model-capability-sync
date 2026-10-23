@@ -1,6 +1,5 @@
 /**
- * Name redirection: move a gateway id's source prefix to the end of the
- * display name.
+ * Name redirection: automatically prepend each gateway model's source prefix.
  *
  * A gateway namespaces its upstream by a path prefix (`qoder/qfmodel`,
  * `qoder-cn/qfmodel`, `antigravity/gemini-3.8-flash`) and keeps the upstream's
@@ -9,12 +8,16 @@
  * clue to which source serves the answer is buried in an id nobody sees while
  * chatting.
  *
- * The rule here is deliberately mechanical: take the first path segment of the
- * id, strip anything of that shape already on the name (a leading `prefix/`, a
- * trailing 【prefix】, or the earlier half-width ` (prefix)`), then append
- * 【prefix】. So the prefix ends up in exactly one place, at the end, in one
- * spelling. Re-running the rule is a no-op, so a second apply never stacks
- * suffixes on top of each other.
+ * The rule here is applied to ALL models automatically:
+ * - Models with a source prefix (e.g. `qoder/`) get 【vendor】 prepended
+ * - Models without a prefix get 【other】 prepended
+ *
+ * The rule is deliberately mechanical: take the first path segment of the id
+ * (or use 'other' if none), strip anything of that shape already on the name
+ * (leading 【prefix】, a prefix/ at the front, or a trailing 【prefix】 from
+ * before the redesign), then prepend 【prefix】 followed by a space. So the
+ * prefix ends up in exactly one place, at the front, in one spelling.
+ * Re-running the rule is a no-op, so reapplying never stacks prefixes.
  *
  * This module is pure: no settings access, no React. The section renders the
  * plan and writes it through the official settings service.
@@ -68,32 +71,54 @@ function bareIdOf(id: string): string {
 /**
  * Compute the redirected name for one model.
  *
- * The suffix uses full-width brackets — `【qoder】` — because a model label is
- * already dense with ASCII (`Qwen3.8-Flash (0305)`), and another pair of ASCII
- * parentheses would read as part of the upstream's own name.
+ * All models get a prefix annotation: one extracted from the id (e.g. `qoder/` → `【qoder】`),
+ * or `【other】` when the id has no path segment. The prefix uses full-width brackets
+ * because a model label is already dense with ASCII, and parentheses would read as
+ * part of the upstream's own name. Placing it at the front makes it immediately
+ * visible as the source, improving clarity.
  * @param id - the gateway model id exactly as configured.
  * @param name - the stored display name; the empty string when it is unset.
  * @returns the prefix, both labels, and whether the write changes anything.
  */
 export function redirectName(id: string, name: string): Omit<NameRow, 'id'> {
-  const prefix = sourcePrefixOf(id)
+  let prefix = sourcePrefixOf(id)
+  if (prefix === '') prefix = 'other' // No source prefix in id → use 【other】
+  
   const before = name !== '' ? name : id
-  if (prefix === '') return { prefix, before, after: before, changed: false }
-  const suffix = `【${prefix}】`
-  // Strip our own previous suffix first, so applying twice is a no-op. The
-  // half-width `(prefix)` shape is stripped too: it was an earlier spelling of
-  // this same rule, and normalizing it costs one more endsWith check.
-  let base = name.endsWith(suffix) ? name.slice(0, -suffix.length) : name
-  const legacy = ` (${prefix})`
-  if (base.endsWith(legacy)) base = base.slice(0, -legacy.length)
-  // A name that still carries the prefix at the front — the usual case, since
-  // a gateway hands back `beichen/gpt-6-astra` as the label — is cleaned too:
-  // the prefix moves to the end, it must not stay at the front as well.
-  const lead = `${prefix}/`
-  if (base.startsWith(lead)) base = base.slice(lead.length)
-  base = base.trimEnd()
-  if (base === '') base = bareIdOf(id)
-  const after = `${base}${suffix}`
+  const prefix_bracket = `【${prefix}】`
+  const prefix_space = `${prefix_bracket} `
+
+  // If already has the exact prefix at the beginning, no change needed (idempotent).
+  if (before.startsWith(prefix_space)) {
+    return { prefix, before, after: before, changed: false }
+  }
+
+  // Strip any existing bracket annotation (both leading and trailing).
+  // This handles both our 【prefix】 (new prefix-at-start), the old rule's suffix
+  // 【prefix】 (at the end), legacy ( ) and user-added [ ] gracefully.
+  let stripped = before
+
+  // Strip any leading bracket annotation (【】, (), [])
+  const leadingAnnotations = /^【[^】]*】\s*|\s*\([^)]*\)\s*|\s*\[[^\]]*\]\s*/
+  stripped = stripped.replace(leadingAnnotations, '')
+
+  // Strip any trailing bracket annotation
+  const trailingAnnotations = /\s*【[^】]*】\s*|\s*\([^)]*\)\s*|\s*\[[^\]]*\]\s*$/
+  while (trailingAnnotations.test(stripped)) {
+    stripped = stripped.replace(trailingAnnotations, '')
+  }
+
+  // Strip leading prefix if present (user might have put "qoder/ModelName")
+  const originalPrefix = sourcePrefixOf(id)
+  if (originalPrefix !== '') {
+    const lead = `${originalPrefix}/`
+    if (stripped.startsWith(lead)) {
+      stripped = stripped.slice(lead.length)
+    }
+  }
+
+  const base = stripped.trimEnd() !== '' ? stripped.trimEnd() : bareIdOf(id)
+  const after = `${prefix_space}${base}`
   return { prefix, before, after, changed: after !== before }
 }
 
