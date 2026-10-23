@@ -5,6 +5,7 @@
 
 export const zh = {
   nav: '模型能力同步',
+  navRedirect: '名称重定向',
   loading: '正在读取配置…',
   intro: '从 models.dev 查询已配置模型的能力（上下文窗口、输出上限、是否支持图片、推理档位），并写入所选供应商的配置。本页只写配置，不发送任何推理请求。',
   writeTarget: '写入位置',
@@ -60,12 +61,25 @@ export const zh = {
   catalogStale: '在线目录下载失败，正在使用本机缓存（{time}）。数据可能不是最新，字段含义不变。',
   nothingSelected: '没有选中任何模型。',
   done: '完成。',
+  redirectIntro: '为显示名称补上来源前缀：网关模型 ID 里第一个「/」之前的部分（如 qoder/qfmodel 的 qoder）会追加到名称末尾，同名模型因此能区分来源。',
+  redirectRule: '规则：Qwen3.8-Flash → Qwen3.8-Flash (qoder)。重复应用不会叠加后缀；没有来源前缀的模型保持原样。',
+  redirectSearch: '搜索模型 ID 或名称',
+  redirectNoChanges: '这些名称已带来源前缀，无需改动。',
+  redirectSummary: '将改写 {count} 个名称',
+  colPrefix: '来源前缀',
+  colNameBefore: '当前名称',
+  colNameAfter: '新名称',
+  redirectFooter: '{count} 个模型没有来源前缀，保持原样。',
+  redirectApply: '写入名称',
+  redirectApplying: '正在写入…',
+  redirectApplied: '已改写 {count} 个名称',
 } as const
 
 export type SyncKey = keyof typeof zh
 
 export const en: Record<SyncKey, string> = {
   nav: 'Model capabilities',
+  navRedirect: 'Model name redirect',
   loading: 'Reading configuration…',
   intro: 'Look up capabilities (context window, output cap, image input, reasoning efforts) for the models already configured here, then write them into the selected provider. This page only writes configuration; it never sends a model request.',
   writeTarget: 'Write to',
@@ -121,4 +135,16 @@ export const en: Record<SyncKey, string> = {
   catalogStale: 'The online catalog download failed; using the local copy from {time}. The facts still mean the same thing, they may just be older.',
   nothingSelected: 'Nothing selected.',
   done: 'Done.',
+  redirectIntro: 'Give each display name a source prefix: the part of a gateway model id before its first "/" (for qoder/qfmodel, that is qoder) is appended to the name, so models with the same name stay distinguishable.',
+  redirectRule: 'Rule: Qwen3.8-Flash → Qwen3.8-Flash (qoder). Re-applying never stacks a suffix; models without a source prefix are left alone.',
+  redirectSearch: 'Search model id or name',
+  redirectNoChanges: 'These names already carry a source prefix; nothing to change.',
+  redirectSummary: '{count} names will be rewritten',
+  colPrefix: 'Prefix',
+  colNameBefore: 'Current name',
+  colNameAfter: 'New name',
+  redirectFooter: '{count} models have no source prefix and stay as they are.',
+  redirectApply: 'Write names',
+  redirectApplying: 'Writing…',
+  redirectApplied: 'Rewrote {count} names',
 }

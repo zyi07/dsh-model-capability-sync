@@ -8,67 +8,17 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CapabilityFields, LiveResponse, LiveRow, PreviewResponse, PreviewRow, RpcEnvelope } from '../types.ts'
-import { sortByModelId } from '../sort.ts'
-
-/** One settings descriptor as the remote reports it (only the fields used here). */
-export interface SettingsDescriptor {
-  ns: string
-  revision: number
-  value: Record<string, unknown>
-}
-
-/** One ordered form edit understood by `settings.mutate`. */
-export interface SettingsPathOp {
-  op: 'set' | 'unset'
-  path: string[]
-  value?: unknown
-}
+import type { ModelDraft, SettingsDescriptor, SettingsInjected, SettingsPathOp } from './shared.ts'
+import { isBlank, modelsOf, providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf, textOf } from './shared.ts'
 
 /** What `apply` injects into this component. */
-export interface SyncSectionInjected {
+export interface SyncSectionInjected extends SettingsInjected {
   preview(request: { ids: string[]; aliases?: Record<string, string>; refresh?: boolean }): Promise<RpcEnvelope<PreviewResponse>>
   live(request: { provider: string; ids: string[] }): Promise<RpcEnvelope<LiveResponse>>
-  describeSettings(): Promise<SettingsDescriptor[]>
-  mutateSettings(ns: string, ops: SettingsPathOp[], expectedRevision?: number): Promise<SettingsDescriptor>
 }
 
 export interface SyncSectionProps extends SyncSectionInjected {
   t: (key: string, params?: Record<string, unknown>) => string
-}
-
-/** A model entry as the provider stores it: structurally open, so unknown fields survive. */
-type ModelDraft = Record<string, unknown>
-
-/** The official adapter this plugin fills capabilities into. */
-const TARGET_DEFAULT = 'llm-pi-ai'
-
-/**
- * How a writable settings namespace reads to a person.
- *
- * A namespace id is an internal identity, so the page names the thing it
- * configures instead. Provenance is a table, not a guess: the client cannot
- * see which package owns a namespace (`settings.describe` reports only
- * `ns/revision/value/base/user`), and inferring "official" from an `llm-`
- * prefix would eventually mislabel a third-party plugin. A namespace this
- * table does not know is shown as a plugin, with its id.
- */
-const TARGET_DIRECTORY: Record<string, { native: boolean; nameKey: string }> = {
-  'llm-pi-ai': { native: true, nameKey: 'nameLlmPiAi' },
-  'llm-deepseek': { native: true, nameKey: 'nameLlmDeepseek' },
-  'llm-deepseek-account': { native: true, nameKey: 'nameLlmDeepseekAccount' },
-  'llm-newapi': { native: false, nameKey: 'nameLlmNewapi' },
-}
-
-/**
- * Render one namespace as provenance plus a name.
- * @param ns - the settings namespace id.
- * @param t - the bound translate function.
- * @returns copy such as `原生配置 · pi-ai`, never a bare namespace id.
- */
-function targetLabelOf(ns: string, t: SyncSectionProps['t']): string {
-  const known = TARGET_DIRECTORY[ns]
-  if (known === undefined) return `${t('sourcePlugin')} · ${ns}`
-  return `${known.native ? t('sourceNative') : t('sourcePlugin')} · ${t(known.nameKey)}`
 }
 
 /** One capability field that applying a row would rewrite. */
@@ -83,31 +33,6 @@ interface PlanRow {
   row: PreviewRow
   model: ModelDraft
   changes: FieldChange[]
-}
-
-/** Read a string field, or the empty string. */
-function textOf(model: ModelDraft, key: string): string {
-  const value = model[key]
-  return typeof value === 'string' ? value : ''
-}
-
-/** The provider dict inside one descriptor's live value. */
-function providersOf(descriptor: SettingsDescriptor | undefined): Record<string, Record<string, unknown>> {
-  const providers = descriptor?.value?.providers
-  return typeof providers === 'object' && providers !== null
-    ? providers as Record<string, Record<string, unknown>>
-    : {}
-}
-
-/** The models array of one provider profile. */
-function modelsOf(provider: Record<string, unknown> | undefined): ModelDraft[] {
-  const models = provider?.models
-  return Array.isArray(models) ? models.filter((entry): entry is ModelDraft => typeof entry === 'object' && entry !== null) : []
-}
-
-/** The models of one provider profile, in display order. */
-function sortedModelsOf(provider: Record<string, unknown> | undefined): ModelDraft[] {
-  return sortByModelId(modelsOf(provider), model => textOf(model, 'id'))
 }
 
 /** Human token count: 128000 → `128K`, 1000000 → `1M`. */
@@ -128,23 +53,6 @@ function viaLabel(row: PreviewRow, t: SyncSectionProps['t']): string {
     case 'suffix': return t('viaSuffix')
     default: return ''
   }
-}
-
-/**
- * Whether a stored value carries no decision of its own.
- *
- * The provider schema materializes defaults, so a field the user never set can
- * arrive as `[]` or `{}` rather than as `undefined`. Treating those as "already
- * set" is what made an empty `input: []` survive every fill — the field looked
- * answered while it said nothing. `false` and `0` are decisions, not blanks.
- * @param value - the stored value.
- * @returns true when filling the field loses no user intent.
- */
-function isBlank(value: unknown): boolean {
-  if (value === undefined || value === null || value === '') return true
-  if (Array.isArray(value)) return value.length === 0
-  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0
-  return false
 }
 
 /**

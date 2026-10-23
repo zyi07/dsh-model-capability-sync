@@ -10,8 +10,10 @@
  */
 import type { RpcEnvelope } from '../types.ts'
 import type { LiveResponse, PreviewRequest, PreviewResponse } from '../types.ts'
+import { RenameSection } from './RenameSection.tsx'
 import { SyncSection } from './SyncSection.tsx'
-import type { SettingsDescriptor, SettingsPathOp, SyncSectionInjected } from './SyncSection.tsx'
+import type { SyncSectionInjected } from './SyncSection.tsx'
+import type { SettingsDescriptor, SettingsInjected, SettingsPathOp } from './shared.ts'
 import { en, zh } from './locale.ts'
 
 /** Copy namespace owned by this plugin. */
@@ -199,17 +201,21 @@ export function apply(ctx: ClientContext): void {
   const remote = ctx.get('remote') as RemoteFace
   const t = ctx.locale.bind(NS)
 
-  const injected = (): SyncSectionInjected => ({
-    preview: request =>
-      connection.rpc.call(CHANNEL, 'preview', request) as Promise<RpcEnvelope<PreviewResponse>>,
-    live: request =>
-      connection.rpc.call(CHANNEL, 'live', request) as Promise<RpcEnvelope<LiveResponse>>,
+  const settingsInjected = (): SettingsInjected => ({
     describeSettings: async () => namespacesOf(await remote.settings.describe()),
     mutateSettings: async (ns, ops, expectedRevision) => {
       const view = unwrap(await remote.settings.mutate(ns, ops, expectedRevision)) as SettingsDescriptor | undefined
       if (view === undefined) throw new Error('settings.mutate returned no namespace view')
       return view
     },
+  })
+
+  const injected = (): SyncSectionInjected => ({
+    ...settingsInjected(),
+    preview: request =>
+      connection.rpc.call(CHANNEL, 'preview', request) as Promise<RpcEnvelope<PreviewResponse>>,
+    live: request =>
+      connection.rpc.call(CHANNEL, 'live', request) as Promise<RpcEnvelope<LiveResponse>>,
   })
 
   ctx.slots.inject('settings.section', () => ctx.slots.register({
@@ -220,4 +226,13 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: injected,
   }, SyncSection))
+
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: 'model-name-redirect',
+    order: 17,
+    label: () => t('navRedirect'),
+    locale: NS,
+    inject: settingsInjected,
+  }, RenameSection))
 }

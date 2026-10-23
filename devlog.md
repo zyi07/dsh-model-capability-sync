@@ -1,5 +1,33 @@
 # devlog
 
+## 2026-10-23
+
+### 今天完成
+
+- 新增第二个设置节「名称重定向」（`model-name-redirect`）：把网关模型 ID 的来源前缀
+  追加到显示名称末尾，解决 `qoder/qfmodel` 与 `qoder-cn/qfmodel` 同为
+  `Qwen3.8-Flash` 无法区分的问题。
+  - `src/client/rename.ts`：纯规则 —— `sourcePrefixOf` 取第一个 `/` 前的前缀；
+    `redirectName` 先剥掉同名 ` (prefix)` 后缀再追加，重复应用幂等；无前缀 ID 不动；
+    名称为空时用 ID 去前缀后的部分兜底。
+  - `src/client/RenameSection.tsx`：选写入位置 / 供应商 → 逐行展示「来源前缀 /
+    当前名称 / 新名称」→ 搜索、只看有变化的、勾选 → 写入 `name` 字段；同样处理
+    `settings/conflict`（重载后请用户再点一次）。
+  - `src/client/shared.ts`：把配置读取类型与 `providersOf/modelsOf/sortedModelsOf/
+    textOf/isBlank/targetLabelOf/TARGET_DEFAULT` 从 `SyncSection.tsx` 抽出来，两个
+    设置节共用；`apply.ts` 拆出 `settingsInjected` 并注册第二个 section（order 17）。
+  - 文案：zh/en 同步新增 `navRedirect`、`redirect*`、`colPrefix`、`colNameBefore`、
+    `colNameAfter` 等键。
+  - 测试：`scripts/test-rename.mjs`（`npm run test:rename`），7 条断言覆盖前缀解析、
+    幂等、兜底、不改输入数组。
+- 更新 README（「名称重定向」小节、目录结构、测试命令）与 `docs/requirements.md`
+  （F10 + 明确不做里补一条"不重写用户自起的名称"）。
+
+### 待做什么
+
+- 在浏览器里实际点一次「写入名称」，确认模型选择器显示为 `Qwen3.8-Flash (qoder)`。
+- 若未来需要在选择器里按来源分组，可考虑把 `sourcePrefixOf` 暴露给排序层。
+
 ## 2026-10-21
 
 ### 今天完成
