@@ -4,6 +4,11 @@
 
 ### 今天完成
 
+- 按用户反馈把名称重定向的后缀改成全角 `【prefix】`（只保留末尾括号这一种形式）：
+  `Qwen3.8-Flash` → `Qwen3.8-Flash【qoder】`。半角 ` (prefix)` 视为旧拼写，重跑规则
+  会被剥掉并换成全角形式（自动迁移，不会叠加）。单测扩到 8 条，README / requirements /
+  文案同步更新。提交 `2b44141`。
+
 - 新增第二个设置节「名称重定向」（`model-name-redirect`）：把网关模型 ID 的来源前缀
   追加到显示名称末尾，解决 `qoder/qfmodel` 与 `qoder-cn/qfmodel` 同为
   `Qwen3.8-Flash` 无法区分的问题。
