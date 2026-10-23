@@ -12,7 +12,7 @@ import type { SortMode } from '../sort.ts'
 import { sortByModelId } from '../sort.ts'
 import type { ModelDraft, SettingsDescriptor, SettingsInjected, SettingsPathOp } from './shared.ts'
 import { isBlank, modelsOf, providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf, textOf } from './shared.ts'
-import { planNames, renameModels } from './rename.ts'
+import { planNames, renameModels, redirectName } from './rename.ts'
 
 /** What `apply` injects into this component. */
 export interface SyncSectionInjected extends SettingsInjected {
@@ -599,6 +599,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
                           />
                         </th>
                         <th>{t('colModel')}</th>
+                        <th>{t('colName')}</th>
                         <th>{t('colMatch')}</th>
                         <th>{t('colContext')}</th>
                         <th>{t('colOutput')}</th>
@@ -623,6 +624,9 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
                               />
                             </td>
                             <td className="cs-id">{row.id}</td>
+                            <td>
+                              {redirectName(row.id, textOf(model, 'name')).after}
+                            </td>
                             <td className="cs-dim">
                               {row.match === undefined ? '—' : `${row.match.provider}/${row.match.modelId}`}
                               {' '}<span className="cs-badge">{viaLabel(row, t)}</span>
