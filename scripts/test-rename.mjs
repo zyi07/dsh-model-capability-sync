@@ -34,6 +34,25 @@ test('redirectName normalizes the earlier half-width spelling', () => {
   assert.equal(row.changed, true)
 })
 
+test('redirectName moves a leading prefix to the end', () => {
+  const row = redirectName('beichen/gpt-6-astra', 'beichen/gpt-6-astra')
+  assert.equal(row.before, 'beichen/gpt-6-astra')
+  assert.equal(row.after, 'gpt-6-astra【beichen】')
+  assert.equal(row.changed, true)
+})
+
+test('redirectName cleans a label that only keeps the upstream prefix', () => {
+  const row = redirectName('qoder-cn/Qwen3.8-Flash', 'qoder-cn/Qwen3.8-Flash')
+  assert.equal(row.after, 'Qwen3.8-Flash【qoder-cn】')
+})
+
+test('redirectName is idempotent after a leading-prefix cleanup', () => {
+  const first = redirectName('beichen/gpt-6-astra', 'beichen/gpt-6-astra')
+  const second = redirectName('beichen/gpt-6-astra', first.after)
+  assert.equal(second.after, first.after)
+  assert.equal(second.changed, false)
+})
+
 test('redirectName leaves ids without a prefix alone', () => {
   const row = redirectName('standalone', 'Bare')
   assert.equal(row.changed, false)

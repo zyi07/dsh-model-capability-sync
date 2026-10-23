@@ -10,9 +10,10 @@
  * chatting.
  *
  * The rule here is deliberately mechanical: take the first path segment of the
- * id, drop an identical trailing 【prefix】 if the name already carries one
- * (including the earlier half-width `(prefix)` spelling), then append
- * 【prefix】. Re-running the rule is a no-op, so a second apply never stacks
+ * id, strip anything of that shape already on the name (a leading `prefix/`, a
+ * trailing 【prefix】, or the earlier half-width ` (prefix)`), then append
+ * 【prefix】. So the prefix ends up in exactly one place, at the end, in one
+ * spelling. Re-running the rule is a no-op, so a second apply never stacks
  * suffixes on top of each other.
  *
  * This module is pure: no settings access, no React. The section renders the
@@ -82,10 +83,16 @@ export function redirectName(id: string, name: string): Omit<NameRow, 'id'> {
   // Strip our own previous suffix first, so applying twice is a no-op. The
   // half-width `(prefix)` shape is stripped too: it was an earlier spelling of
   // this same rule, and normalizing it costs one more endsWith check.
-  let stripped = name.endsWith(suffix) ? name.slice(0, -suffix.length) : name
+  let base = name.endsWith(suffix) ? name.slice(0, -suffix.length) : name
   const legacy = ` (${prefix})`
-  if (stripped.endsWith(legacy)) stripped = stripped.slice(0, -legacy.length)
-  const base = stripped.trimEnd() !== '' ? stripped.trimEnd() : bareIdOf(id)
+  if (base.endsWith(legacy)) base = base.slice(0, -legacy.length)
+  // A name that still carries the prefix at the front — the usual case, since
+  // a gateway hands back `beichen/gpt-6-astra` as the label — is cleaned too:
+  // the prefix moves to the end, it must not stay at the front as well.
+  const lead = `${prefix}/`
+  if (base.startsWith(lead)) base = base.slice(lead.length)
+  base = base.trimEnd()
+  if (base === '') base = bareIdOf(id)
   const after = `${base}${suffix}`
   return { prefix, before, after, changed: after !== before }
 }

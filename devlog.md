@@ -4,6 +4,12 @@
 
 ### 今天完成
 
+- 名称重定向规则补"清洗"（用户 m00427："已有前缀的清洗一下，只保留我们加的【】括号的方式"）：
+  `redirectName` 先剥名称开头的 `prefix/`（网关常把 ID 原样当 label 返回，profile 里实测 53 个），
+  再剥旧的半角 ` (prefix)` 与重复的 `【prefix】`，最后统一追加一个全角 `【prefix】`——前缀只出现在末尾一处。
+  locale/README/requirements 文案同步为"清洗"语义；单测扩到 11 条（开头前缀迁移、清洗后幂等）。
+  typecheck/build 通过，新 bundle 已部署（dist 里 `\u3010` 为 esbuild 对全角括号的正常转义）。
+
 - 按用户反馈把名称重定向的后缀改成全角 `【prefix】`（只保留末尾括号这一种形式）：
   `Qwen3.8-Flash` → `Qwen3.8-Flash【qoder】`。半角 ` (prefix)` 视为旧拼写，重跑规则
   会被剥掉并换成全角形式（自动迁移，不会叠加）。单测扩到 8 条，README / requirements /

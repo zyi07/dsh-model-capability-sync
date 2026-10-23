@@ -52,7 +52,9 @@
 （`qoder/qfmodel`、`qoder-cn/qfmodel`），显示名称却沿用上游的
 `Qwen3.8-Flash`，于是两个来源在模型选择器里长得一模一样。
 
-规则是机械的：**取模型 ID 第一个 `/` 之前的前缀，用全角 `【】` 包住，追加到显示名称末尾**。
+规则是机械的：**取模型 ID 第一个 `/` 之前的前缀，清洗名称里所有该前缀的其他形态，
+只保留末尾的全角 `【prefix】` 一种**。清洗包括：开头的 `qoder/`（网关常把 ID 原样
+当名称返回）、早先那版半角 ` (qoder)`、以及重复应用留下的旧 `【qoder】`。
 用全角括号是因为上游自己的名字里已经塞满半角括号（`Qwen3.8-Flash (0305)`），
 再来一对半角就分不清哪段是来源、哪段是原名。
 
@@ -60,10 +62,11 @@
 | --- | --- | --- |
 | `qoder/qfmodel` | `Qwen3.8-Flash` | `Qwen3.8-Flash【qoder】` |
 | `qoder-cn/qfmodel` | `Qwen3.8-Flash` | `Qwen3.8-Flash【qoder-cn】` |
-| `group/all-in` | `all in` | `all in【group】` |
+| `beichen/gpt-6-astra` | `beichen/gpt-6-astra` | `gpt-6-astra【beichen】` |
+| `antigravity/gemini-3.8-flash` | `antigravity/Gemini 3.8 Flash` | `Gemini 3.8 Flash【antigravity】` |
 
-- **幂等**：名称已经带同名后缀时先剥掉再追加，重复应用不会叠成
-  `【qoder】【qoder】`；早先那版半角 ` (qoder)` 也会被识别并改成全角形式。
+- **幂等**：先剥再贴，重复应用不会叠成 `【qoder】【qoder】`，也不会把开头的
+  `qoder/` 和末尾的 `【qoder】` 同时留下。
 - **无前缀不动**：`standalone` 这类没有 `/` 的 ID 保持原样，也不可勾选。
 - **名称留空时**用 ID 去掉前缀后的部分兜底：`qoder/unnamed` → `unnamed【qoder】`。
 - 只写 `name` 字段：上下文窗口、图片能力、推理档位一概不碰；写入同样走
