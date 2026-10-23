@@ -8,6 +8,14 @@
 - 改进 `src/sort.ts` `redirectedLabel`：改为递归剥除**所有**尾部括号对，排序键从此干净无污染。
 - 测试调整（bare ID 作为 name 保留 `/`）；26/26 全绿；新 bundle 已部署；提交 `74b0cd2 fix: strip all trailing brackets…`。
 
+### 供应商分组排序
+
+- 用户反馈（m00746）：现有排序按名称字母序，但应该按【】里面的供应商（vendor）排序，同一供应商的模型聚在一起。
+- 推翻之前的 `redirectedLabel(id, name): string` 设计。新设计：`redirectedSortKey(id, name): [prefix, name]` 二元组，第一级按供应商、第二级按模型名。
+- 实现：regex 提取尾部【vendor】/(vendor)/[vendor]，无匹配时回退到 ID 前缀；compareRedirected 两级比较。
+- 验证：手工测试所有供应商正确排序、groupby vendor；test-sort.mjs 6/6；26/26 全绿。
+- 提交 `2dd5746 refactor: sort by source prefix (vendor) as primary key…`；bundle 已部署。
+
 ### 前面完成（合并）
 
 - 按用户反馈（"两个功能太割裂"），把名称重定向功能从独立的 RenameSection 合并到 SyncSection 中。UI 现在是：
