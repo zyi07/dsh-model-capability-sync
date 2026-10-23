@@ -333,7 +333,8 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const doRename = async (): Promise<void> => {
     const descriptor = descriptors.find(entry => entry.ns === targetNs)
     if (descriptor === undefined) return
-    const targets = new Set(planNames(models).filter(row => row.changed).map(row => row.id))
+    // Auto-redirect now applies to ALL models, not just those with changes
+    const targets = new Set(models.map(model => textOf(model, 'id')))
     if (targets.size === 0) {
       setNotice(t('redirectNoChanges'))
       return
