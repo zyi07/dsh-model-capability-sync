@@ -7,8 +7,10 @@
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
+import type { SortMode } from '../sort.ts'
+import { sortByModelId } from '../sort.ts'
 import type { ModelDraft, SettingsDescriptor, SettingsInjected } from './shared.ts'
-import { providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf } from './shared.ts'
+import { providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf, textOf } from './shared.ts'
 import { planNames, renameModels } from './rename.ts'
 
 /** What `apply` injects into this component (the capability channel is not used here). */
@@ -35,6 +37,8 @@ export function RenameSection(props: RenameSectionProps): ReactNode {
   const [query, setQuery] = useState('')
   const [onlyChanged, setOnlyChanged] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [sortMode, setSortMode] = useState<SortMode>('redirected')
+  const [rearrange, setRearrange] = useState(false)
   const [notice, setNotice] = useState<string | undefined>(undefined)
 
   /**
@@ -61,7 +65,7 @@ export function RenameSection(props: RenameSectionProps): ReactNode {
       }
       const providers = providersOf(target)
       const firstKey = Object.keys(providers)[0] ?? ''
-      const entries = sortedModelsOf(providers[firstKey])
+      const entries = sortedModelsOf(providers[firstKey], sortMode)
       setTargetNs(target.ns)
       setProviderKey(firstKey)
       setModels(entries)
@@ -77,16 +81,25 @@ export function RenameSection(props: RenameSectionProps): ReactNode {
   useEffect(() => { void load() }, [])
 
   /** Show one provider's models, in display order, with a clean slate. */
-  const showProvider = (ns: string, key: string): void => {
+  const showProvider = (ns: string, key: string, mode: SortMode = sortMode): void => {
     const providers = providersOf(descriptors.find(entry => entry.ns === ns))
     const resolved = key !== '' && providers[key] !== undefined ? key : Object.keys(providers)[0] ?? ''
-    const entries = sortedModelsOf(providers[resolved])
+    const entries = sortedModelsOf(providers[resolved], mode)
     setTargetNs(ns)
     setProviderKey(resolved)
     setModels(entries)
     setSelected(preselected(entries))
     setNotice(undefined)
     setQuery('')
+  }
+
+  /** Switch the ordering shown here, and the order a write would produce. */
+  const setSortModeAndApply = (mode: SortMode): void => {
+    setSortMode(mode)
+    const descriptor = descriptors.find(entry => entry.ns === targetNs)
+    if (descriptor !== undefined) {
+      setModels(sortedModelsOf(providersOf(descriptor)[providerKey], mode))
+    }
   }
 
   /** Write the selected names into the provider entry. */
@@ -98,7 +111,17 @@ export function RenameSection(props: RenameSectionProps): ReactNode {
       setNotice(t('nothingSelected'))
       return
     }
-    const { next, written } = renameModels(models, targets)
+    const renamed = renameModels(models, targets)
+    const written = renamed.written
+    // The order written with the names is the same order the model list will
+    // show, so the two pages cannot disagree about where a model sits.
+    const next = sortByModelId(
+      renamed.next,
+      model => textOf(model, 'id'),
+      model => textOf(model, 'name'),
+      sortMode,
+    )
+    const moved = next.reduce((total, model, index) => total + (model === renamed.next[index] ? 0 : 1), 0)
     setBusy(true)
     setErrorText(undefined)
     setNotice(undefined)
@@ -115,7 +138,9 @@ export function RenameSection(props: RenameSectionProps): ReactNode {
         entry.ns === targetNs && typeof view.revision === 'number'
           ? { ...entry, revision: view.revision }
           : entry))
-      setNotice(t('redirectApplied', { count: written }))
+      setNotice(rearrange && moved > 0
+        ? `${t('redirectApplied', { count: written })} ${t('redirectRearranged', { count: moved })}`
+        : t('redirectApplied', { count: written }))
     } catch (error) {
       const code = (error as { code?: string } | undefined)?.code
       if (code === 'settings/conflict') {
@@ -127,7 +152,7 @@ export function RenameSection(props: RenameSectionProps): ReactNode {
           setDescriptors(list)
           const descriptorNow = list.find(entry => entry.ns === targetNs)
           if (descriptorNow !== undefined) {
-            const entries = sortedModelsOf(providersOf(descriptorNow)[providerKey])
+            const entries = sortedModelsOf(providersOf(descriptorNow)[providerKey], sortMode)
             setModels(entries)
             setSelected(preselected(entries))
           }
@@ -205,6 +230,17 @@ export function RenameSection(props: RenameSectionProps): ReactNode {
           </select>
         </label>
         <span className="cs-hint">{t('modelCount', { count: models.length })}</span>
+        <label className="cs-field" title={sortMode === 'redirected' ? t('redirectSortHint') : undefined}>
+          <span className="cs-hint">{t('sortMode')}</span>
+          <select
+            className="cs-select"
+            value={sortMode}
+            onChange={(event) => { setSortModeAndApply(event.target.value as SortMode) }}
+          >
+            <option value="prefix">{t('sortByPrefix')}</option>
+            <option value="redirected">{t('sortByRedirected')}</option>
+          </select>
+        </label>
       </div>
 
       {errorText !== undefined ? <p className="cs-error">{errorText}</p> : null}
@@ -284,6 +320,10 @@ export function RenameSection(props: RenameSectionProps): ReactNode {
               : <p className="cs-hint">{t('redirectFooter', { count: plan.length - changed.length })}</p>}
 
             <div className="cs-row">
+              <label className="cs-hint">
+                <input type="checkbox" checked={rearrange} onChange={(event) => { setRearrange(event.target.checked) }} />
+                {' '}{t('redirectRearrange')}
+              </label>
               <button
                 type="button"
                 className="cs-button cs-button--primary"

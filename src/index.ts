@@ -38,14 +38,15 @@ interface Registrar {
 }
 
 /** Resolve one id against the catalog into a preview row. */
-function previewOne(catalog: Catalog, id: string, aliases: Readonly<Record<string, string>>): PreviewRow {
-  const match = matchModel(catalog, id, aliases)
-  if (match === undefined) return { id, reason: 'not in the models.dev catalog' }
+function previewOne(catalog: Catalog, id: string, aliases: Readonly<Record<string, string>>, name = ''): PreviewRow {
+  const named = name === '' ? {} : { name }
+  const match = matchModel(catalog, id, aliases, name)
+  if (match === undefined) return { id, ...named, reason: 'not in the models.dev catalog' }
   const entry = catalog.byId.get(match.modelId)?.find(candidate => candidate.provider === match.provider)
-  if (entry === undefined) return { id, match, reason: 'catalog entry vanished between match and read' }
+  if (entry === undefined) return { id, ...named, match, reason: 'catalog entry vanished between match and read' }
   const fields = capabilitiesOf(entry)
-  if (Object.keys(fields).length === 0) return { id, match, reason: 'catalog entry states no capability facts' }
-  return { id, match, fields }
+  if (Object.keys(fields).length === 0) return { id, ...named, match, reason: 'catalog entry states no capability facts' }
+  return { id, ...named, match, fields }
 }
 
 /** Serve one `preview` request. */
@@ -53,11 +54,12 @@ async function preview(request: PreviewRequest, signal: AbortSignal): Promise<Pr
   const ids = Array.isArray(request.ids) ? request.ids.filter(id => typeof id === 'string' && id.length > 0) : []
   const catalog = await loadCatalog({ refresh: request.refresh === true, proxyUrl: request.proxyUrl }, signal)
   const aliases = request.aliases ?? {}
+  const names = request.names ?? {}
   return {
     fetchedAt: catalog.fetchedAt,
     catalogModels: catalog.modelCount,
     ...catalog.stale === true ? { stale: true } : {},
-    rows: ids.map(id => previewOne(catalog, id, aliases)),
+    rows: ids.map(id => previewOne(catalog, id, aliases, typeof names[id] === 'string' ? names[id] : '')),
   }
 }
 

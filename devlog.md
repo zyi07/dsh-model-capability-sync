@@ -4,6 +4,21 @@
 
 ### 今天完成
 
+- 能力匹配增加**显示名称降级**（用户 m00498：模型 ID 匹配不上的，用右侧真实名称再试）：
+  `PreviewRequest` 加 `names`，客户端把 `id → name` 一起发给宿主；`matchModel` 新增第 4 个参数
+  `name`，规则顺序调整为 精确 ID → 去前缀 → 去变体后缀 → **显示名称**（再试其最后一段）→ 别名。
+  名称里的来源标注（`【qoder】`、`(qoder)`、`[cn]`）由 `cleanDisplayName` 剥掉，所以重定向与否
+  解析结果一致。新增 `MatchVia: 'name' | 'nameSuffix'` 与 `matchedName`/`nameSource`，
+  UI 显示「按名称 / 名称去变体」。别名挪到最后，因为它会被每一行通过名称继承，等于失效。
+- 模型列表增加**两种排序选项**（用户 m00544）：`按模型前缀排序（分组）` 与
+  `按重定向后【来源】名称排序`，模型能力同步节与名称重定向节都有；名称重定向节默认用后者，
+  应用名称时按当前排序一并重排模型目录（可选开关「同时按当前排序重排模型目录」）。
+  `src/sort.ts` 新增 `SortMode`、`redirectedLabel`、`compareRedirected`，`sortByModelId` 加
+  `nameOf` + `mode` 参数。
+- 新测试：`scripts/test-match.mjs`(9)、`scripts/test-sort.mjs`(6)，连同 rename(11) 全绿；
+  `npm run test:match` / `test:sort`。typecheck/build 通过，host+client bundle 已部署，
+  `systemctl restart dsh.service` 让宿主按新匹配规则生效。
+
 - 名称重定向规则补"清洗"（用户 m00427："已有前缀的清洗一下，只保留我们加的【】括号的方式"）：
   `redirectName` 先剥名称开头的 `prefix/`（网关常把 ID 原样当 label 返回，profile 里实测 53 个），
   再剥旧的半角 ` (prefix)` 与重复的 `【prefix】`，最后统一追加一个全角 `【prefix】`——前缀只出现在末尾一处。

@@ -7,6 +7,7 @@
  * instead of narrowing the entry to the fields this plugin understands.
  * @module dsh-model-capability-sync/client/shared
  */
+import type { SortMode } from '../sort.ts'
 import { sortByModelId } from '../sort.ts'
 
 /** One settings descriptor as the remote reports it (only the fields used here). */
@@ -82,8 +83,13 @@ export function modelsOf(provider: Record<string, unknown> | undefined): ModelDr
 }
 
 /** The models of one provider profile, in display order. */
-export function sortedModelsOf(provider: Record<string, unknown> | undefined): ModelDraft[] {
-  return sortByModelId(modelsOf(provider), model => textOf(model, 'id'))
+export function sortedModelsOf(provider: Record<string, unknown> | undefined, mode: SortMode = 'prefix'): ModelDraft[] {
+  return sortByModelId(
+    modelsOf(provider),
+    model => textOf(model, 'id'),
+    model => textOf(model, 'name'),
+    mode,
+  )
 }
 
 /** Read a string field, or the empty string. */

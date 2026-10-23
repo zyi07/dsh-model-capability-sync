@@ -3,14 +3,23 @@
  *
  * A gateway id carries its vendor as a path prefix (`qoder-gj/Qwen3.8-Flash`),
  * so sorting on the whole id would group by nothing useful: the model family
- * is the part after the slash, and the vendor is what a reader scans for. The
- * order is therefore: vendor prefix first, then the model name inside it. An
- * id without a prefix has only its name to sort on.
+ * is the part after the slash, and the vendor is what a reader scans for.
+ *
+ * Two orders are offered, because two different questions get asked of the
+ * same list. `prefix` groups by vendor -- the right shape when the list is
+ * arranged around who serves what. `redirected` sorts on the name a picker
+ * shows once the source prefix has been moved to the end
+ * (`Qwen3.8-Flash【qoder】`, literally with full-width brackets),
+ * which reads as one alphabetical model list instead of one silo per vendor.
  *
  * Comparison is case-insensitive, with the raw id as the final tie-break, so
  * two runs on the same configuration always produce the same array.
  * @module dsh-model-capability-sync/sort
  */
+
+/** How a model list is ordered. */
+export type SortMode = 'prefix' | 'redirected'
+
 
 /** The two ordering keys of one id: the vendor group, then the model name. */
 export interface ModelSortKey {
@@ -35,6 +44,40 @@ export function modelSortKey(id: string): ModelSortKey {
 }
 
 /**
+ * The prefix a redirect would append, i.e. the vendor segment of the id.
+ * @param id - the gateway model id exactly as configured.
+ * @returns the first path segment, or `''` when the id has none.
+ */
+export function sourcePrefix(id: string): string {
+  const slash = id.indexOf('/')
+  return slash <= 0 ? '' : id.slice(0, slash)
+}
+
+/**
+ * The label a picker shows once the name-redirect rule has run.
+ *
+ * Kept in step with `redirectName` by construction rather than by import: the
+ * ordering code stays a pure comparator over strings, and the rule itself
+ * lives in the client. The bracketed prefix is always the last thing on the
+ * label, so cutting at the bracket gives the name the sort should read.
+ * @param id - the gateway model id exactly as configured.
+ * @param name - the configured display name; `''` when unset.
+ * @returns the redirect target label, lower-cased for comparison.
+ */
+export function redirectedLabel(id: string, name: string): string {
+  const prefix = sourcePrefix(id)
+  let base = name !== '' ? name : id
+  const suffix = '【' + prefix + '】'
+  if (base.endsWith(suffix)) base = base.slice(0, -suffix.length)
+  const legacy = ` (${prefix})`
+  if (base.endsWith(legacy)) base = base.slice(0, -legacy.length)
+  const lead = `${prefix}/`
+  if (base.startsWith(lead)) base = base.slice(lead.length)
+  const trimmed = base.trim()
+  return (trimmed !== '' ? trimmed : id).toLowerCase()
+}
+
+/**
  * Compare two ids in display order.
  * @param left - first id.
  * @param right - second id.
@@ -52,11 +95,43 @@ export function compareModelIds(left: string, right: string): number {
 }
 
 /**
+ * Compare two ids as `redirected` order would list them: on the label the
+ * picker shows, with the raw id breaking ties.
+ * @param left - first id.
+ * @param right - second id.
+ * @param nameOf - reads one id's display name.
+ * @returns negative when `left` sorts first, positive when `right` does.
+ */
+export function compareRedirected(
+  left: string,
+  right: string,
+  nameOf: (id: string) => string,
+): number {
+  const a = redirectedLabel(left, nameOf(left))
+  const b = redirectedLabel(right, nameOf(right))
+  if (a !== b) return a < b ? -1 : 1
+  if (left === right) return 0
+  return left < right ? -1 : 1
+}
+
+/**
  * Return a sorted copy of a model list.
  * @param items - entries in any order; the input array is never mutated.
  * @param idOf - reads the model id out of one entry.
- * @returns the entries in vendor-then-name order.
+ * @param nameOf - reads the display name out of one entry.
+ * @param mode - `prefix` (vendor groups) or `redirected` (shown label).
+ * @returns the entries in the requested order.
  */
-export function sortByModelId<T>(items: readonly T[], idOf: (item: T) => string): T[] {
-  return [...items].sort((left, right) => compareModelIds(idOf(left), idOf(right)))
+export function sortByModelId<T>(
+  items: readonly T[],
+  idOf: (item: T) => string,
+  nameOf: (item: T) => string = () => '',
+  mode: SortMode = 'prefix',
+): T[] {
+  const copy = [...items]
+  if (mode === 'redirected') {
+    const names = new Map(copy.map(item => [idOf(item), nameOf(item)] as const))
+    return copy.sort((left, right) => compareRedirected(idOf(left), idOf(right), id => names.get(id) ?? ''))
+  }
+  return copy.sort((left, right) => compareModelIds(idOf(left), idOf(right)))
 }

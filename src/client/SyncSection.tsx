@@ -8,12 +8,14 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CapabilityFields, LiveResponse, LiveRow, PreviewResponse, PreviewRow, RpcEnvelope } from '../types.ts'
+import type { SortMode } from '../sort.ts'
+import { sortByModelId } from '../sort.ts'
 import type { ModelDraft, SettingsDescriptor, SettingsInjected, SettingsPathOp } from './shared.ts'
 import { isBlank, modelsOf, providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf, textOf } from './shared.ts'
 
 /** What `apply` injects into this component. */
 export interface SyncSectionInjected extends SettingsInjected {
-  preview(request: { ids: string[]; aliases?: Record<string, string>; refresh?: boolean }): Promise<RpcEnvelope<PreviewResponse>>
+  preview(request: { ids: string[]; aliases?: Record<string, string>; names?: Record<string, string>; refresh?: boolean }): Promise<RpcEnvelope<PreviewResponse>>
   live(request: { provider: string; ids: string[] }): Promise<RpcEnvelope<LiveResponse>>
 }
 
@@ -51,6 +53,8 @@ function viaLabel(row: PreviewRow, t: SyncSectionProps['t']): string {
     case 'folded': return t('viaFolded')
     case 'basename': return t('viaBasename')
     case 'suffix': return t('viaSuffix')
+    case 'name': return t('viaName')
+    case 'nameSuffix': return t('viaNameSuffix')
     default: return ''
   }
 }
@@ -156,6 +160,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const [overwrite, setOverwrite] = useState(false)
   const [query, setQuery] = useState('')
   const [onlyChanged, setOnlyChanged] = useState(false)
+  const [sortMode, setSortMode] = useState<SortMode>('prefix')
   const [busy, setBusy] = useState<'idle' | 'analyzing' | 'applying'>('idle')
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [catalogInfo, setCatalogInfo] = useState<string | undefined>(undefined)
@@ -186,7 +191,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   }).length
 
   /** Read every configurable entry and select the default target. */
-  const load = async (): Promise<void> => {
+  const load = async (mode: SortMode = sortMode): Promise<void> => {
     setStatus('loading')
     setErrorText(undefined)
     try {
@@ -203,7 +208,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       const firstKey = Object.keys(providers)[0] ?? ''
       setTargetNs(target.ns)
       setProviderKey(firstKey)
-      setModels(sortedModelsOf(providers[firstKey]))
+      setModels(sortedModelsOf(providers[firstKey], mode))
       setRows(undefined)
       setLiveRows(new Map())
       setSelected(new Set())
@@ -218,12 +223,12 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   useEffect(() => { void load() }, [])
 
   /** Show one provider's models, in display order, with a clean slate. */
-  const showProvider = (ns: string, key: string): void => {
+  const showProvider = (ns: string, key: string, mode: SortMode = sortMode): void => {
     const providers = providersOf(descriptors.find(entry => entry.ns === ns))
     const resolved = key !== '' && providers[key] !== undefined ? key : Object.keys(providers)[0] ?? ''
     setTargetNs(ns)
     setProviderKey(resolved)
-    setModels(sortedModelsOf(providers[resolved]))
+    setModels(sortedModelsOf(providers[resolved], mode))
     setRows(undefined)
     setLiveRows(new Map())
     setSelected(new Set())
@@ -246,7 +251,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     const list = await describeSettings()
     setDescriptors(list)
     const descriptor = list.find(entry => entry.ns === targetNs)
-    if (descriptor !== undefined) setModels(sortedModelsOf(providersOf(descriptor)[providerKey]))
+    if (descriptor !== undefined) setModels(sortedModelsOf(providersOf(descriptor)[providerKey], sortMode))
   }
 
   /** Preselect every row that would actually change. */
@@ -265,7 +270,22 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     setStaleInfo(undefined)
     try {
       const ids = models.map(model => textOf(model, 'id')).filter(id => id.length > 0)
-      const result = await preview({ ids, ...refresh ? { refresh: true } : {} })
+      // Names travel with the ids: a gateway may hide the model behind an
+      // opaque id (`qoder/qfmodel` for Qwen3.8-Flash), and the label is the
+      // only place the real model shows up. Sending them makes the id-only
+      // rows resolvable, and since the host strips source annotations, a
+      // renamed label resolves exactly like the original.
+      const names: Record<string, string> = {}
+      for (const model of models) {
+        const id = textOf(model, 'id')
+        const name = textOf(model, 'name')
+        if (id !== '' && name !== '' && name !== id) names[id] = name
+      }
+      const result = await preview({
+        ids,
+        ...Object.keys(names).length > 0 ? { names } : {},
+        ...refresh ? { refresh: true } : {},
+      })
       if (!result.ok) throw new Error(result.error.message)
       setRows(result.value.rows)
       selectChanging(result.value.rows, models, overwrite)
@@ -284,6 +304,19 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     } finally {
       setBusy('idle')
     }
+  }
+
+  /**
+   * Switch the ordering and re-sort the list on screen.
+   *
+   * The analysis is kept: the mode only changes the order of the same entries,
+   * so re-querying the catalog would only cost time. Rows are re-read from the
+   * stored order, not from the sorted array, so switching back is exact.
+   */
+  const setSortModeAndApply = (mode: SortMode): void => {
+    setSortMode(mode)
+    const descriptor = descriptors.find(entry => entry.ns === targetNs)
+    if (descriptor !== undefined) setModels(sortedModelsOf(providersOf(descriptor)[providerKey], mode))
   }
 
   /** Switch the overwrite mode and follow it with the selection. */
@@ -315,12 +348,15 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     setErrorText(undefined)
     setNotice(undefined)
     try {
+      // The order is written with the rows: it is a choice the user made
+      // about the list, not an artifact of how the page happened to load.
+      const ordered = sortByModelId(next, model => textOf(model, 'id'), model => textOf(model, 'name'), sortMode)
       const view = await mutateSettings(targetNs, [{
         op: 'set',
         path: ['providers', providerKey, 'models'],
-        value: next,
+        value: ordered,
       }], descriptor.revision)
-      setModels(next)
+      setModels(ordered)
       // Keep the held revision current, so a second apply does not conflict.
       setDescriptors(previous => previous.map(entry =>
         entry.ns === targetNs && typeof view.revision === 'number'
@@ -406,6 +442,17 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
           </select>
         </label>
         <span className="cs-hint">{t('modelCount', { count: models.length })}</span>
+        <label className="cs-field">
+          <span className="cs-hint">{t('sortMode')}</span>
+          <select
+            className="cs-select"
+            value={sortMode}
+            onChange={(event) => { setSortModeAndApply(event.target.value as SortMode) }}
+          >
+            <option value="prefix">{t('sortByPrefix')}</option>
+            <option value="redirected">{t('sortByRedirected')}</option>
+          </select>
+        </label>
         <span className="cs-hint">{t('willSort')}</span>
       </div>
 

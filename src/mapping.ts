@@ -54,7 +54,9 @@ function reasoningOf(entry: CatalogEntry): Record<string, string> | false | unde
  * Read every capability the catalog states for one entry.
  *
  * The catalog's display name is deliberately not returned: this plugin fills
- * facts, it never renames a model entry.
+ * facts, it never renames a model entry. Renaming has its own section, and the
+ * two must stay separable — a fill that also renamed would make the redirect
+ * undoable.
  * @param entry - the matched catalog entry.
  * @returns only the fields the catalog actually declares.
  */

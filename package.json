@@ -42,6 +42,8 @@
     "build:client": "node scripts/build-client.mjs",
     "typecheck": "npm run typecheck:host && npm run typecheck:client",
     "test:rename": "node --experimental-strip-types --test scripts/test-rename.mjs",
+    "test:match": "node --experimental-strip-types --test scripts/test-match.mjs",
+    "test:sort": "node --experimental-strip-types --test scripts/test-sort.mjs",
     "typecheck:host": "tsc -p tsconfig.json --noEmit",
     "typecheck:client": "tsc -p tsconfig.client.json --noEmit",
     "prepublishOnly": "npm run typecheck && npm run build && npm run verify:package",

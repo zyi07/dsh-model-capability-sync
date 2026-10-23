@@ -16,6 +16,26 @@ import type { MatchInfo, MatchVia } from './types.ts'
 const VARIANT_SUFFIX = /-(high|low|medium|minimal|max|xhigh|thinking|preview|latest|chat)$/
 
 /**
+ * How a display name is reduced to the thing worth looking up.
+ *
+ * The name-redirect section appends `【qoder】` to a label, and people annotate
+ * by hand in other ways (`Qwen3.8-Flash (qoder)`, `[cn] Qwen3.8-Flash`). Those
+ * annotations are provenance, not model identity: `qoder` is a gateway, and if
+ * the annotation were left in, this plugin's own renaming would change what it
+ * resolves. Bracketed segments go; the rest is trimmed to one line.
+ */
+const SOURCE_ANNOTATION = /【[^】]*】|\([^)]*\)|\[[^\]]*\]/g
+
+/**
+ * Reduce a display name to its model part.
+ * @param name - the configured label.
+ * @returns the label without source annotations or stray whitespace.
+ */
+export function cleanDisplayName(name: string): string {
+  return name.replace(SOURCE_ANNOTATION, ' ').replace(/\s+/g, ' ').trim()
+}
+
+/**
  * First-party vendor provider ids in the models.dev catalog. The same model
  * appears under dozens of aggregators whose capacity numbers disagree, so a
  * vendor entry outranks every reseller when both exist.
@@ -83,25 +103,47 @@ function describe(entry: CatalogEntry, via: MatchVia): MatchInfo {
   }
 }
 
+/** Try one key exactly, folded, then without a variant suffix. */
+function resolve(catalog: Catalog, key: string): { entry: CatalogEntry; via: MatchVia } | undefined {
+  const hit = lookup(catalog, key)
+  if (hit !== undefined) {
+    const entry = pickBest(hit.entries)
+    if (entry !== undefined) return { entry, via: hit.via }
+  }
+  const stripped = key.replace(VARIANT_SUFFIX, '')
+  if (stripped !== key && stripped.length > 0) {
+    const again = lookup(catalog, stripped)
+    if (again !== undefined) {
+      const entry = pickBest(again.entries)
+      if (entry !== undefined) return { entry, via: 'suffix' }
+    }
+  }
+  return undefined
+}
+
 /**
  * Resolve one gateway model id.
+ *
+ * The walk is strict to loose: the id first, then the id without its vendor
+ * prefix and variant suffix, then the configured display name, and an explicit
+ * alias last. The id outranks the name because an exact id is the user's own
+ * fact; the name comes second because a gateway may expose `qoder/qfmodel`
+ * labelled `Qwen3.8-Flash`, and the label names the model the id hides. The
+ * alias is last on purpose: it is a hand-made fallback, and an alias already
+ * applied to a name would be inherited by every row the name resolves — the
+ * opposite of an override.
  * @param catalog - the indexed catalog.
  * @param id - the gateway model id exactly as configured.
  * @param aliases - explicit gateway id → catalog id overrides.
+ * @param name - the configured display name, when there is one.
  * @returns the match, or `undefined` when nothing fits.
  */
 export function matchModel(
   catalog: Catalog,
   id: string,
   aliases: Readonly<Record<string, string>> = {},
+  name = '',
 ): MatchInfo | undefined {
-  const alias = aliases[id]
-  if (alias !== undefined && alias.length > 0) {
-    const hit = lookup(catalog, alias)
-    const entry = hit === undefined ? undefined : pickBest(hit.entries)
-    if (entry !== undefined) return describe(entry, 'alias')
-  }
-
   const exact = lookup(catalog, id)
   if (exact !== undefined) {
     const entry = pickBest(exact.entries)
@@ -124,6 +166,32 @@ export function matchModel(
       const entry = pickBest(hit.entries)
       if (entry !== undefined) return describe(entry, 'suffix')
     }
+  }
+
+  // From here the name speaks for the id: try it as-is, then its last segment
+  // (`qoder/DeepSeek-Flash【qoder】` → `DeepSeek-Flash`). The trailing bracketed
+  // annotation is dropped first, so whether the name-redirect section ran
+  // never changes the answer.
+  const label = cleanDisplayName(name)
+  if (label.length > 0) {
+    const hit = resolve(catalog, label)
+    if (hit !== undefined) {
+      return { ...describe(hit.entry, hit.via === 'suffix' ? 'nameSuffix' : 'name'), matchedName: label, nameSource: 'name' }
+    }
+    const tail = basename(label)
+    if (tail !== label && tail.length > 0) {
+      const loose = resolve(catalog, tail)
+      if (loose !== undefined) {
+        return { ...describe(loose.entry, loose.via === 'suffix' ? 'nameSuffix' : 'name'), matchedName: tail, nameSource: 'name' }
+      }
+    }
+  }
+
+  const alias = aliases[id]
+  if (alias !== undefined && alias.length > 0) {
+    const hit = lookup(catalog, alias)
+    const entry = hit === undefined ? undefined : pickBest(hit.entries)
+    if (entry !== undefined) return describe(entry, 'alias')
   }
 
   return undefined

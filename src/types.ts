@@ -31,7 +31,10 @@ export interface CapabilityFields {
 }
 
 /** How a gateway id was matched against the catalog. */
-export type MatchVia = 'alias' | 'exact' | 'folded' | 'basename' | 'suffix'
+export type MatchVia = 'alias' | 'exact' | 'folded' | 'basename' | 'suffix' | 'name' | 'nameSuffix'
+
+/** Where the key a `name` match used came from: the stored display name, or its id as a last resort. */
+export type NameSource = 'name' | 'id'
 
 /** The catalog entry a gateway id resolved to. */
 export interface MatchInfo {
@@ -41,6 +44,10 @@ export interface MatchInfo {
   modelId: string
   /** Which rule produced this match. */
   via: MatchVia
+  /** For a `name`/`nameSuffix` match: the label the id was resolved through. */
+  matchedName?: string
+  /** For a `name`/`nameSuffix` match: whether that label was the display name or the id. */
+  nameSource?: NameSource
   /** True when the entry belongs to the model's first-party vendor, not a reseller. */
   firstParty?: boolean
   /** Human name from the catalog, when present. */
@@ -51,6 +58,8 @@ export interface MatchInfo {
 export interface PreviewRow {
   /** The gateway model id exactly as configured. */
   id: string
+  /** The configured display name, when the request carried one. */
+  name?: string
   match?: MatchInfo
   fields?: CapabilityFields
   /** Why no capability could be resolved, when `fields` is absent. */
@@ -63,6 +72,13 @@ export interface PreviewRequest {
   ids: string[]
   /** Explicit gateway id → models.dev model id overrides, applied first. */
   aliases?: Record<string, string>
+  /**
+   * Display names by gateway id. A display name often carries facts the id
+   * does not — a gateway may expose `qoder/qfmodel` labelled `Qwen3.8-Flash`,
+   * or the label may keep the upstream id in front. When the id itself
+   * resolves to nothing, these are tried before giving up.
+   */
+  names?: Record<string, string>
   /** Forward-proxy URL for the catalog download. */
   proxyUrl?: string
   /** Bypass the in-memory catalog cache. */
