@@ -54,31 +54,52 @@ export function sourcePrefix(id: string): string {
 }
 
 /**
- * The label a picker shows once the name-redirect rule has run.
+ * The redirected sort key for one model: the source prefix (in brackets) as the primary key.
  *
- * Kept in step with `redirectName` by construction rather than by import: the
- * ordering code stays a pure comparator over strings, and the rule itself
- * lives in the client. The bracketed prefix is always the last thing on the
- * label, so stripping all trailing bracket annotations gives the name the sort
- * should read.
+ * When models are redirected to have the source prefix at the end in full-width
+ * brackets (`GLM-5.3-Flash【workbuddy】`), a natural sort is to group by that
+ * prefix first (so all `【workbuddy】` together), then sort within the group by
+ * the model name. This gives the appearance of a list organized by vendor, with
+ * a readable name for each.
  *
- * Annotations are `【prefix】` (ours), `(anything)` (upstream or user), or
- * `[anything]` (user); stripping all of them ensures a consistent sort key
- * regardless of how many times the list has been touched.
+ * The prefix is extracted from the displayed name if present; if absent or empty,
+ * the whole ID is used as the sort key (so models without a source are grouped
+ * together at the end, in ID order).
+ *
  * @param id - the gateway model id exactly as configured.
  * @param name - the configured display name; `''` when unset.
- * @returns the label without any trailing bracket annotation, lower-cased.
+ * @returns a tuple `[prefix, modelName]` for two-level sort: first by prefix,
+ *          then by name, both lower-cased.
  */
-export function redirectedLabel(id: string, name: string): string {
+export function redirectedSortKey(id: string, name: string): [string, string] {
   const prefix = sourcePrefix(id)
-  let base = name !== '' ? name : id
-  // Strip any trailing bracket pairs. Order matters: strip 【】 first (ours), then () and [] (user/upstream).
-  const annotations = /\s*【[^】]*】\s*|\s*\([^)]*\)\s*|\s*\[[^\]]*\]\s*$/
-  while (annotations.test(base)) {
-    base = base.replace(annotations, '')
+  const displayName = name !== '' ? name : id
+
+  // Extract the bracketed prefix from the end of the display name.
+  // Patterns: 【vendor】, (vendor), [vendor]
+  let extracted = ''
+  let cleaned = displayName
+
+  // Try full-width first
+  const fullWidthMatch = displayName.match(/【([^】]+)】\s*$/)
+  if (fullWidthMatch) {
+    extracted = fullWidthMatch[1] ?? ''
+    cleaned = displayName.slice(0, -fullWidthMatch[0].length).trim()
+  } else {
+    // Try half-width () or []
+    const halfWidthMatch = displayName.match(/[([]\s*([^)\]]*)\s*[)\]]\s*$/)
+    if (halfWidthMatch) {
+      extracted = halfWidthMatch[1] ?? ''
+      cleaned = displayName.slice(0, -halfWidthMatch[0].length).trim()
+    }
   }
-  const trimmed = base.trim()
-  return (trimmed !== '' ? trimmed : id).toLowerCase()
+
+  // If no prefix was found in the name, use the ID prefix as fallback
+  const sortPrefix = extracted !== '' ? extracted : (prefix !== '' ? prefix : '')
+  // If the cleaned name is empty, use the ID without its prefix as fallback
+  const sortName = cleaned !== '' ? cleaned : (prefix !== '' ? id.slice(prefix.length + 1) : id)
+
+  return [sortPrefix.toLowerCase(), sortName.toLowerCase()]
 }
 
 /**
@@ -99,8 +120,8 @@ export function compareModelIds(left: string, right: string): number {
 }
 
 /**
- * Compare two ids as `redirected` order would list them: on the label the
- * picker shows, with the raw id breaking ties.
+ * Compare two ids as `redirected` order would list them: group by source
+ * prefix (from the bracketed annotation), then sort by model name within group.
  * @param left - first id.
  * @param right - second id.
  * @param nameOf - reads one id's display name.
@@ -111,9 +132,13 @@ export function compareRedirected(
   right: string,
   nameOf: (id: string) => string,
 ): number {
-  const a = redirectedLabel(left, nameOf(left))
-  const b = redirectedLabel(right, nameOf(right))
-  if (a !== b) return a < b ? -1 : 1
+  const [aPrefix, aName] = redirectedSortKey(left, nameOf(left))
+  const [bPrefix, bName] = redirectedSortKey(right, nameOf(right))
+  // Primary sort: by prefix (vendor)
+  if (aPrefix !== bPrefix) return aPrefix < bPrefix ? -1 : 1
+  // Secondary sort: by model name within the same prefix
+  if (aName !== bName) return aName < bName ? -1 : 1
+  // Tie-break: raw IDs for determinism
   if (left === right) return 0
   return left < right ? -1 : 1
 }

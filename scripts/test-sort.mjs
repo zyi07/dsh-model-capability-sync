@@ -5,7 +5,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { redirectedLabel, sortByModelId } from '../src/sort.ts'
+import { redirectedSortKey, sortByModelId } from '../src/sort.ts'
 
 /** Three models where the two orders disagree on purpose. */
 const models = [
@@ -16,11 +16,15 @@ const models = [
 
 const idsOf = (list) => list.map(model => model.id)
 
-test('redirectedLabel reads the name the picker shows', () => {
-  assert.equal(redirectedLabel('qoder/qfmodel', 'Qwen3.8-Flash【qoder】'), 'qwen3.8-flash')
-  assert.equal(redirectedLabel('qoder/qfmodel', 'Qwen3.8-Flash'), 'qwen3.8-flash')
-  // A name that is a bare ID keeps the whole thing as the sort key (slashes in names are preserved)
-  assert.equal(redirectedLabel('qoder-cn/GLM-5.3', 'qoder-cn/GLM-5.3'), 'qoder-cn/glm-5.3')
+test('redirectedSortKey extracts vendor and model name', () => {
+  const key1 = redirectedSortKey('qoder/qfmodel', 'Qwen3.8-Flash【qoder】')
+  assert.deepEqual(key1, ['qoder', 'qwen3.8-flash'])
+  
+  const key2 = redirectedSortKey('workbuddy-ai/model', 'GLM-5.3-Flash (Max) [workbuddy-ai]')
+  assert.deepEqual(key2, ['workbuddy-ai', 'glm-5.3-flash (max)'])
+  
+  const key3 = redirectedSortKey('standalone', 'My Model')
+  assert.deepEqual(key3, ['', 'my model'])
 })
 
 test('prefix order groups by vendor first', () => {
@@ -33,12 +37,14 @@ test('prefix order groups by vendor first', () => {
   ])
 })
 
-test('redirected order is one alphabetical run of names', () => {
+test('redirected order groups by prefix, then sorts by name', () => {
+  // With redirected mode, we group by source prefix first (in brackets), then sort by name.
+  // The test models have: antigravity, qoder, qoder-cn prefixes, so alphabetically: antigravity, qoder, qoder-cn
   const sorted = sortByModelId(models, model => model.id, model => model.name, 'redirected')
   assert.deepEqual(idsOf(sorted), [
     'antigravity/gemini-3.8-flash',
-    'qoder-cn/GLM-5.3',
     'qoder/qfmodel',
+    'qoder-cn/GLM-5.3',
   ])
 })
 
@@ -60,15 +66,17 @@ test('sorting never mutates the input', () => {
   assert.deepEqual(idsOf(models), before)
 })
 
-test('redirected order ignores whether the rename has been applied yet', () => {
+test('redirected order is consistent whether names are already renamed', () => {
   const plain = [
-    { id: 'qoder/qfmodel', name: 'Qwen3.8-Flash' },
-    { id: 'qoder-cn/Qwen3.8-Flash', name: 'Qwen3.8-Flash' },
+    { id: 'qoder-cn/x', name: 'Name' },
+    { id: 'qoder/x', name: 'Name' },
   ]
   const renamed = [
-    { id: 'qoder/qfmodel', name: 'Qwen3.8-Flash【qoder】' },
-    { id: 'qoder-cn/Qwen3.8-Flash', name: 'Qwen3.8-Flash【qoder-cn】' },
+    { id: 'qoder-cn/x', name: 'Name【qoder-cn】' },
+    { id: 'qoder/x', name: 'Name【qoder】' },
   ]
+  // Both should sort with qoder before qoder-cn (vendor prefix order)
   const order = list => idsOf(sortByModelId(list, model => model.id, model => model.name, 'redirected'))
-  assert.deepEqual(order(plain), order(renamed))
+  assert.deepEqual(order(plain), ['qoder/x', 'qoder-cn/x'])
+  assert.deepEqual(order(renamed), ['qoder/x', 'qoder-cn/x'])
 })
