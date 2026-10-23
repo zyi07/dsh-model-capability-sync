@@ -59,20 +59,24 @@ export function sourcePrefix(id: string): string {
  * Kept in step with `redirectName` by construction rather than by import: the
  * ordering code stays a pure comparator over strings, and the rule itself
  * lives in the client. The bracketed prefix is always the last thing on the
- * label, so cutting at the bracket gives the name the sort should read.
+ * label, so stripping all trailing bracket annotations gives the name the sort
+ * should read.
+ *
+ * Annotations are `【prefix】` (ours), `(anything)` (upstream or user), or
+ * `[anything]` (user); stripping all of them ensures a consistent sort key
+ * regardless of how many times the list has been touched.
  * @param id - the gateway model id exactly as configured.
  * @param name - the configured display name; `''` when unset.
- * @returns the redirect target label, lower-cased for comparison.
+ * @returns the label without any trailing bracket annotation, lower-cased.
  */
 export function redirectedLabel(id: string, name: string): string {
   const prefix = sourcePrefix(id)
   let base = name !== '' ? name : id
-  const suffix = '【' + prefix + '】'
-  if (base.endsWith(suffix)) base = base.slice(0, -suffix.length)
-  const legacy = ` (${prefix})`
-  if (base.endsWith(legacy)) base = base.slice(0, -legacy.length)
-  const lead = `${prefix}/`
-  if (base.startsWith(lead)) base = base.slice(lead.length)
+  // Strip any trailing bracket pairs. Order matters: strip 【】 first (ours), then () and [] (user/upstream).
+  const annotations = /\s*【[^】]*】\s*|\s*\([^)]*\)\s*|\s*\[[^\]]*\]\s*$/
+  while (annotations.test(base)) {
+    base = base.replace(annotations, '')
+  }
   const trimmed = base.trim()
   return (trimmed !== '' ? trimmed : id).toLowerCase()
 }

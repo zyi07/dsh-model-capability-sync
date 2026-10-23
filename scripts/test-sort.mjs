@@ -19,7 +19,8 @@ const idsOf = (list) => list.map(model => model.id)
 test('redirectedLabel reads the name the picker shows', () => {
   assert.equal(redirectedLabel('qoder/qfmodel', 'Qwen3.8-Flash【qoder】'), 'qwen3.8-flash')
   assert.equal(redirectedLabel('qoder/qfmodel', 'Qwen3.8-Flash'), 'qwen3.8-flash')
-  assert.equal(redirectedLabel('qoder-cn/GLM-5.3', 'qoder-cn/GLM-5.3'), 'glm-5.3')
+  // A name that is a bare ID keeps the whole thing as the sort key (slashes in names are preserved)
+  assert.equal(redirectedLabel('qoder-cn/GLM-5.3', 'qoder-cn/GLM-5.3'), 'qoder-cn/glm-5.3')
 })
 
 test('prefix order groups by vendor first', () => {
