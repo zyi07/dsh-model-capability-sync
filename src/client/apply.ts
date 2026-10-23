@@ -10,7 +10,6 @@
  */
 import type { RpcEnvelope } from '../types.ts'
 import type { LiveResponse, PreviewRequest, PreviewResponse } from '../types.ts'
-import { RenameSection } from './RenameSection.tsx'
 import { SyncSection } from './SyncSection.tsx'
 import type { SyncSectionInjected } from './SyncSection.tsx'
 import type { SettingsDescriptor, SettingsInjected, SettingsPathOp } from './shared.ts'
@@ -226,13 +225,4 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: injected,
   }, SyncSection))
-
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'model-name-redirect',
-    order: 17,
-    label: () => t('navRedirect'),
-    locale: NS,
-    inject: settingsInjected,
-  }, RenameSection))
 }

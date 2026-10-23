@@ -12,6 +12,7 @@ import type { SortMode } from '../sort.ts'
 import { sortByModelId } from '../sort.ts'
 import type { ModelDraft, SettingsDescriptor, SettingsInjected, SettingsPathOp } from './shared.ts'
 import { isBlank, modelsOf, providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf, textOf } from './shared.ts'
+import { planNames, renameModels } from './rename.ts'
 
 /** What `apply` injects into this component. */
 export interface SyncSectionInjected extends SettingsInjected {
@@ -161,6 +162,8 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const [query, setQuery] = useState('')
   const [onlyChanged, setOnlyChanged] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('prefix')
+  const [renaming, setRenaming] = useState(false)
+  const [reordering, setReordering] = useState(false)
   const [busy, setBusy] = useState<'idle' | 'analyzing' | 'applying'>('idle')
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const [catalogInfo, setCatalogInfo] = useState<string | undefined>(undefined)
@@ -326,6 +329,66 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     selectChanging(rows, models, mode)
   }
 
+  /** Rename all models that would change: one-shot action. */
+  const doRename = async (): Promise<void> => {
+    const descriptor = descriptors.find(entry => entry.ns === targetNs)
+    if (descriptor === undefined) return
+    const targets = new Set(planNames(models).filter(row => row.changed).map(row => row.id))
+    if (targets.size === 0) {
+      setNotice(t('redirectNoChanges'))
+      return
+    }
+    const renamed = renameModels(models, targets)
+    setRenaming(true)
+    setErrorText(undefined)
+    setNotice(undefined)
+    try {
+      const ordered = sortByModelId(renamed.next, model => textOf(model, 'id'), model => textOf(model, 'name'), sortMode)
+      const view = await mutateSettings(targetNs, [{
+        op: 'set',
+        path: ['providers', providerKey, 'models'],
+        value: ordered,
+      }], descriptor.revision)
+      setModels(ordered)
+      setDescriptors(previous => previous.map(entry =>
+        entry.ns === targetNs && typeof view.revision === 'number'
+          ? { ...entry, revision: view.revision }
+          : entry))
+      setNotice(`${t('redirectApplied', { count: renamed.written })}`)
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : String(error))
+    } finally {
+      setRenaming(false)
+    }
+  }
+
+  /** Reorder models to match the chosen sort mode. */
+  const doReorder = async (): Promise<void> => {
+    const descriptor = descriptors.find(entry => entry.ns === targetNs)
+    if (descriptor === undefined) return
+    setReordering(true)
+    setErrorText(undefined)
+    setNotice(undefined)
+    try {
+      const ordered = sortByModelId(models, model => textOf(model, 'id'), model => textOf(model, 'name'), sortMode)
+      const view = await mutateSettings(targetNs, [{
+        op: 'set',
+        path: ['providers', providerKey, 'models'],
+        value: ordered,
+      }], descriptor.revision)
+      setModels(ordered)
+      setDescriptors(previous => previous.map(entry =>
+        entry.ns === targetNs && typeof view.revision === 'number'
+          ? { ...entry, revision: view.revision }
+          : entry))
+      setNotice(t('reordered'))
+    } catch (error) {
+      setErrorText(error instanceof Error ? error.message : String(error))
+    } finally {
+      setReordering(false)
+    }
+  }
+
   /** Write the selected rows into the provider entry. */
   const applyRows = async (): Promise<void> => {
     const descriptor = descriptors.find(entry => entry.ns === targetNs)
@@ -470,6 +533,22 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
               <input type="checkbox" checked={overwrite} onChange={(event) => { setOverwriteMode(event.target.checked) }} />
               {' '}{t('overwrite')}
             </label>
+            <button
+              type="button"
+              className="cs-button"
+              disabled={renaming}
+              onClick={() => { void doRename() }}
+            >
+              {renaming ? t('redirectApplying') : t('redirectApply')}
+            </button>
+            <button
+              type="button"
+              className="cs-button"
+              disabled={reordering}
+              onClick={() => { void doReorder() }}
+            >
+              {reordering ? t('reordering') : t('reorder')}
+            </button>
           </div>
         )}
 
