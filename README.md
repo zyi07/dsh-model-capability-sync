@@ -84,6 +84,32 @@
 - 表格逐行展示「来源前缀 / 当前名称 / 新名称」，可按 ID 或名称搜索、
   只看有变化的行；不勾选的行不会被改写。
 
+## 名称重定向
+
+第二个设置节「名称重定向」解决另一件事：网关用路径前缀区分上游
+（`qoder/qfmodel`、`qoder-cn/qfmodel`），显示名称却沿用上游的
+`Qwen3.8-Flash`，于是两个来源在模型选择器里长得一模一样。
+
+规则是机械的：**取模型 ID 第一个 `/` 之前的前缀，用全角 `【】` 包住，追加到显示名称末尾**。
+用全角括号是因为上游自己的名字里已经塞满半角括号（`Qwen3.8-Flash (0305)`），
+再来一对半角就分不清哪段是来源、哪段是原名。
+
+| 模型 ID | 原名称 | 新名称 |
+| --- | --- | --- |
+| `qoder/qfmodel` | `Qwen3.8-Flash` | `Qwen3.8-Flash【qoder】` |
+| `qoder-cn/qfmodel` | `Qwen3.8-Flash` | `Qwen3.8-Flash【qoder-cn】` |
+| `group/all-in` | `all in` | `all in【group】` |
+
+- **幂等**：名称已经带同名后缀时先剥掉再追加，重复应用不会叠成
+  `【qoder】【qoder】`；早先那版半角 ` (qoder)` 也会被识别并改成全角形式。
+- **无前缀不动**：`standalone` 这类没有 `/` 的 ID 保持原样，也不可勾选。
+- **名称留空时**用 ID 去掉前缀后的部分兜底：`qoder/unnamed` → `unnamed【qoder】`。
+- 只写 `name` 字段：上下文窗口、图片能力、推理档位一概不碰；写入同样走
+  `remote.settings.mutate`，同样处理 `settings/conflict`（重载后再确认）。
+- 表格逐行展示「来源前缀 / 当前名称 / 新名称」，可按 ID 或名称搜索、
+  只看有变化的行；不勾选的行不会被改写。
+
+
 ## 安装
 
 从 npm 安装（发布后）：
@@ -116,8 +142,8 @@ dsh plugin --profile desktop add "link:D:/code/dsh-model-capability-sync"
 | `src/mapping.ts` | 目录条目 → 能力字段（纯函数） |
 | `src/client/` | 设置页（React 组件 + 文案） |
 | `src/client/SyncSection.tsx` | 「模型能力同步」设置节 |
-| `src/client/RenameSection.tsx` | 「名称重定向」设置节 |
-| `src/client/rename.ts` | 名称重定向规则（纯函数） |
+
+| `src/client/rename.ts` | 名称重定向规则（纯函数）；`redirectName/planNames/renameModels` |
 | `src/client/shared.ts` | 两个设置节共享的配置读取工具与类型 |
 | `scripts/` | 构建脚本 + 冒烟脚本 + 规则单元测试 |
 | `docs/` | 需求、技术选型、设计规范、开发计划 |

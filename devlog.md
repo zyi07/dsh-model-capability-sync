@@ -1,5 +1,18 @@
 # devlog
 
+## 2026-10-24
+
+### 今天完成
+
+- 按用户反馈（"两个功能太割裂"），把名称重定向功能从独立的 RenameSection 合并到 SyncSection 中。UI 现在是：
+  - 能力同步节内三个按钮：排序下拉（前缀/重定向后名称）+ 应用能力填充 + 重定向 + 重排。
+  - 重定向和重排都是**一键操作**，不需要选择或开关限定，点就行。
+  - 都按当前选中的排序方式写回，确保显示顺序和配置顺序一致。
+- 删除 `src/client/RenameSection.tsx`；`src/client/apply.ts` 只注册一个设置节。
+- `SyncSection` 新增 `doRename()` 和 `doReorder()` 处理函数；locale 增加 reorder/reordering/reordered/reorderHint。
+- typecheck/build/test 全绿（26/26）；bundle 已部署；提交 `69b83f7 refactor: fold name redirect and reorder into the sync section`。
+- dsh.service 已重启（active）。
+
 ## 2026-10-23
 
 ### 今天完成
