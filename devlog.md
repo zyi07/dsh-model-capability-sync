@@ -2,6 +2,14 @@
 
 ## 2026-10-24
 
+### 匹配规则扩到变体后缀 / 前缀 / 构建号
+
+- 用户反馈（截图）：未匹配列表里很多只是加了后缀，模型能力其实一样。
+- 归因（37 个 id 逐条分析）：四类差异——销售点后缀（`-tiered`/`-disabled`/`-trial`/`-official`/`-free`/`-it`/`-reasoning`、`:free` 路由标签）、尾部被截断（`nemotron-3.5-lightning` vs `...-30b-a3b`）、构建号（`kimi-k3-1`）、多级命名空间（`cline/dots-studio/...`）。
+- 改动 `src/match.ts`：`stripMarkers`（路由标签+宽后缀表+构建号，循环剥）、`foldVersionDots`（`4.5`→`4-5`）、`prefixesOf`（惰性前缀索引）、`matchModel` 逐段剥前缀；`MatchVia` 加 `prefix`，界面显示「前缀匹配」。
+- 实测：37 个 id 从 0 → **34 匹配**（剩 3 个是 id 里根本没有模型名的，如 `1fmodel`）。
+- 测试 test-match 9 → 18 条，全套 35 条全绿；bundle 已部署；提交 `520bec8`。
+
 ### 修复排序算法
 
 - 发现排序混乱的原因：用户配置中名称有混合的【】/()/ [] 标注（不同来源、不同时期），`redirectedLabel` 只剥掉匹配 ID 前缀的 ` (prefix)`，其他留下污染了排序键。
