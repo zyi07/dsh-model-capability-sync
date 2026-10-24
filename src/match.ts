@@ -10,10 +10,53 @@ import type { Catalog, CatalogEntry } from './catalog.ts'
 import type { MatchInfo, MatchVia } from './types.ts'
 
 /**
- * Variant suffixes a gateway appends to one upstream model. Stripping them
- * turns `gemini-3.8-flash-high` back into the catalog's `gemini-3.8-flash`.
+ * Variant suffixes a gateway appends to one upstream model.
+ *
+ * A gateway re-labels the same upstream with its own selling point: `-high`,
+ * `-max` (a bigger window), `-tiered`, `-trial` (a trial tier), `-official`
+ * (the vendor's own route rather than an aggregator's), `-free`, `-it` (an
+ * instruction-tuned build), `-reasoning`, `-disabled` (a model the vendor
+ * publishes but will not serve). None of these changes what the model *is*, so
+ * stripping them turns `gemini-3.8-flash-tiered` back into the catalog's
+ * `gemini-3.8-flash` — which is what its capability facts describe.
  */
-const VARIANT_SUFFIX = /-(high|low|medium|minimal|max|xhigh|thinking|preview|latest|chat)$/
+const VARIANT_SUFFIX = /[-_](high|low|medium|minimal|max|xhigh|thinking|preview|latest|chat|tiered|disabled|trial|official|free|stable|experimental|reasoning|it|instruct|base|pro|flash|mini|nano|small|large)$/i
+
+/**
+ * A reseller's route tag: `:free`, `:beta`, `:nitro`. It rides on the end of an
+ * id and says how the model is sold, never what it is.
+ */
+const ROUTE_TAG = /:[a-z0-9][a-z0-9_-]*$/i
+
+/**
+ * A trailing build number: `kimi-k3-1`, `deepseek-v4-2`.
+ *
+ * Gateways stamp a revision onto an id without changing the model, and the
+ * catalog usually holds only the unnumbered one. Only a bare integer tail is
+ * stripped, so `claude-sonnet-4-5` (where `5` is part of the version) is left
+ * for the dotted/named rules to handle first.
+ */
+const BUILD_NUMBER = /-\d{1,2}$/
+
+/**
+ * Strip every variant marker from one key, repeatedly.
+ *
+ * Gateways stack markers (`gemma-4-26b-a4b-it:free` carries both `-it` and
+ * `:free`, `nemotron-3-nano-omni-30b-a3b-reasoning:free` both again), so one
+ * pass is not enough. The loop is bounded: each pass must shorten the key, and
+ * a key stripped to nothing is abandoned rather than searched as `''`.
+ * @param key - one candidate id.
+ * @returns the shortest key the markers allow, or undefined when none came off.
+ */
+function stripMarkers(key: string): string | undefined {
+  let current = key
+  for (let pass = 0; pass < 6; pass += 1) {
+    const next = current.replace(ROUTE_TAG, '').replace(VARIANT_SUFFIX, '').replace(BUILD_NUMBER, '')
+    if (next === current || next.length === 0) break
+    current = next
+  }
+  return current === key ? undefined : current
+}
 
 /**
  * How a display name is reduced to the thing worth looking up.
@@ -92,6 +135,59 @@ function lookup(catalog: Catalog, key: string): { entries: readonly CatalogEntry
   return undefined
 }
 
+/**
+ * Index the catalog's ids by their leading text, so a truncated key can find
+ * the full ids that begin with it.
+ *
+ * A gateway trims the tail of an upstream id: `nemotron-3.5-lightning` for the
+ * catalog's `nemotron-3.5-lightning-30b-a3b`, `north-mini-code` for
+ * `north-mini-code-1-0`. That tail is a parameter count or a build stamp, which
+ * does not change the capability facts, so a prefix hit is a real match.
+ * @param catalog - the indexed catalog.
+ * @returns prefix → the entries whose id starts with it.
+ */
+function buildPrefixIndex(catalog: Catalog): Map<string, CatalogEntry[]> {
+  const index = new Map<string, CatalogEntry[]>()
+  for (const [id, entries] of catalog.byFolded) {
+    for (let length = 4; length <= id.length; length += 1) {
+      const key = id.slice(0, length)
+      const bucket = index.get(key)
+      if (bucket === undefined) index.set(key, [...entries])
+      else bucket.push(...entries)
+    }
+  }
+  return index
+}
+
+/** The prefix index of the last catalog it was built for. */
+let prefixCache: { catalog: Catalog; index: Map<string, CatalogEntry[]> } | undefined
+
+/**
+ * The prefix index for one catalog, built on first use and reused afterwards.
+ * @param catalog - the indexed catalog.
+ * @returns the prefix → entries map.
+ */
+function prefixesOf(catalog: Catalog): Map<string, CatalogEntry[]> {
+  if (prefixCache !== undefined && prefixCache.catalog === catalog) return prefixCache.index
+  const index = buildPrefixIndex(catalog)
+  prefixCache = { catalog, index }
+  return index
+}
+
+/**
+ * Rewrite a version dot into a dash: `claude-sonnet-4.5` → `claude-sonnet-4-5`.
+ *
+ * Vendors publish either spelling for the same model and the catalog usually
+ * holds only one of them. Only a dot between two digits is rewritten, so
+ * `gpt-4.1-mini` folds while a date-like or decimal tail is left to the caller.
+ * @param key - one candidate id.
+ * @returns the folded key, or undefined when there was no dot to fold.
+ */
+function foldVersionDots(key: string): string | undefined {
+  const folded = key.replace(/(\d)\.(\d)/g, '$1-$2')
+  return folded === key ? undefined : folded
+}
+
 /** Build the public match record for one chosen entry. */
 function describe(entry: CatalogEntry, via: MatchVia): MatchInfo {
   return {
@@ -103,35 +199,65 @@ function describe(entry: CatalogEntry, via: MatchVia): MatchInfo {
   }
 }
 
-/** Try one key exactly, folded, then without a variant suffix. */
-function resolve(catalog: Catalog, key: string): { entry: CatalogEntry; via: MatchVia } | undefined {
-  const hit = lookup(catalog, key)
-  if (hit !== undefined) {
-    const entry = pickBest(hit.entries)
-    if (entry !== undefined) return { entry, via: hit.via }
+/**
+ * Look a key up through every id-only rule, strictest first.
+ *
+ * The ladder is: exact → case-folded → version dots folded → variant markers
+ * stripped → prefix of a longer catalog id. Each step only widens the net, and
+ * the step that fired is reported so the table can say how sure the answer is.
+ * @param catalog - the indexed catalog.
+ * @param key - one candidate id.
+ * @returns the chosen entry and the rule that found it, or undefined.
+ */
+function resolveId(catalog: Catalog, key: string): { entry: CatalogEntry; via: MatchVia } | undefined {
+  const direct = lookup(catalog, key)
+  if (direct !== undefined) {
+    const entry = pickBest(direct.entries)
+    if (entry !== undefined) return { entry, via: direct.via }
   }
-  const stripped = key.replace(VARIANT_SUFFIX, '')
-  if (stripped !== key && stripped.length > 0) {
-    const again = lookup(catalog, stripped)
-    if (again !== undefined) {
-      const entry = pickBest(again.entries)
-      if (entry !== undefined) return { entry, via: 'suffix' }
+
+  const dotted = foldVersionDots(key)
+  if (dotted !== undefined) {
+    const hit = lookup(catalog, dotted)
+    if (hit !== undefined) {
+      const entry = pickBest(hit.entries)
+      if (entry !== undefined) return { entry, via: 'folded' }
     }
   }
+
+  const stripped = stripMarkers(key)
+  if (stripped !== undefined) {
+    // The stripped key may itself be spelled with dots (`gemma-4-26b-a4b-it`
+    // strips to `gemma-4-26b-a4b`, but `claude-sonnet-4.5-thinking` strips to
+    // `claude-sonnet-4.5`), so fold once more before searching.
+    for (const candidate of [stripped, foldVersionDots(stripped)]) {
+      if (candidate === undefined || candidate.length === 0) continue
+      const hit = lookup(catalog, candidate)
+      if (hit !== undefined) {
+        const entry = pickBest(hit.entries)
+        if (entry !== undefined) return { entry, via: 'suffix' }
+      }
+      // A gateway that truncates the tail (`nemotron-3.5-lightning` for
+      // `nemotron-3.5-lightning-30b-a3b`) leaves a prefix of the catalog id.
+      const prefixed = prefixesOf(catalog).get(candidate.toLowerCase())
+      if (prefixed !== undefined) {
+        const entry = pickBest(prefixed)
+        if (entry !== undefined) return { entry, via: 'prefix' }
+      }
+    }
+  }
+
   return undefined
 }
 
 /**
  * Resolve one gateway model id.
  *
- * The walk is strict to loose: the id first, then the id without its vendor
- * prefix and variant suffix, then the configured display name, and an explicit
- * alias last. The id outranks the name because an exact id is the user's own
- * fact; the name comes second because a gateway may expose `qoder/qfmodel`
- * labelled `Qwen3.8-Flash`, and the label names the model the id hides. The
- * alias is last on purpose: it is a hand-made fallback, and an alias already
- * applied to a name would be inherited by every row the name resolves — the
- * opposite of an override.
+ * The walk is strict to loose: the id itself, then the id without its vendor
+ * prefix, then the configured display name — each of those through the full
+ * ladder in {@link resolveId}. An explicit alias is tried last: it is a
+ * hand-made fallback, and an alias applied to a name would be inherited by
+ * every row that name resolves, which is the opposite of an override.
  * @param catalog - the indexed catalog.
  * @param id - the gateway model id exactly as configured.
  * @param aliases - explicit gateway id → catalog id overrides.
@@ -144,45 +270,45 @@ export function matchModel(
   aliases: Readonly<Record<string, string>> = {},
   name = '',
 ): MatchInfo | undefined {
-  const exact = lookup(catalog, id)
-  if (exact !== undefined) {
-    const entry = pickBest(exact.entries)
-    if (entry !== undefined) return describe(entry, exact.via)
-  }
+  const onId = resolveId(catalog, id)
+  if (onId !== undefined) return describe(onId.entry, onId.via)
 
-  const base = basename(id)
-  if (base !== id) {
-    const hit = lookup(catalog, base)
-    if (hit !== undefined) {
-      const entry = pickBest(hit.entries)
-      if (entry !== undefined) return describe(entry, 'basename')
-    }
-  }
-
-  const stripped = base.replace(VARIANT_SUFFIX, '')
-  if (stripped !== base && stripped.length > 0) {
-    const hit = lookup(catalog, stripped)
-    if (hit !== undefined) {
-      const entry = pickBest(hit.entries)
-      if (entry !== undefined) return describe(entry, 'suffix')
-    }
+  // Peel the vendor prefix one segment at a time. A gateway nests its own
+  // namespace in front of the upstream's path (`cline/dots-studio/dots-3-note
+  // -preview:free` around the catalog's `dots-studio/dots-3-note-preview`), so
+  // the useful key is not always the basename: sometimes it is everything after
+  // the first segment, sometimes after the second.
+  const segments = id.split('/')
+  for (let drop = 1; drop < segments.length; drop += 1) {
+    const rest = segments.slice(drop).join('/')
+    if (rest.length === 0) continue
+    const onRest = resolveId(catalog, rest)
+    if (onRest !== undefined) return describe(onRest.entry, onRest.via === 'exact' ? 'basename' : onRest.via)
   }
 
   // From here the name speaks for the id: try it as-is, then its last segment
-  // (`qoder/DeepSeek-Flash【qoder】` → `DeepSeek-Flash`). The trailing bracketed
-  // annotation is dropped first, so whether the name-redirect section ran
-  // never changes the answer.
+  // (`qoder/DeepSeek-Flash【qoder】` → `DeepSeek-Flash`). The bracketed
+  // annotation is dropped first, so whether the name-redirect section ran never
+  // changes the answer.
   const label = cleanDisplayName(name)
   if (label.length > 0) {
-    const hit = resolve(catalog, label)
-    if (hit !== undefined) {
-      return { ...describe(hit.entry, hit.via === 'suffix' ? 'nameSuffix' : 'name'), matchedName: label, nameSource: 'name' }
+    const onName = resolveId(catalog, label)
+    if (onName !== undefined) {
+      return {
+        ...describe(onName.entry, onName.via === 'exact' ? 'name' : onName.via === 'folded' ? 'name' : 'nameSuffix'),
+        matchedName: label,
+        nameSource: 'name',
+      }
     }
     const tail = basename(label)
     if (tail !== label && tail.length > 0) {
-      const loose = resolve(catalog, tail)
-      if (loose !== undefined) {
-        return { ...describe(loose.entry, loose.via === 'suffix' ? 'nameSuffix' : 'name'), matchedName: tail, nameSource: 'name' }
+      const onTail = resolveId(catalog, tail)
+      if (onTail !== undefined) {
+        return {
+          ...describe(onTail.entry, onTail.via === 'exact' ? 'name' : onTail.via === 'folded' ? 'name' : 'nameSuffix'),
+          matchedName: tail,
+          nameSource: 'name',
+        }
       }
     }
   }

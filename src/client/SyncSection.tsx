@@ -54,6 +54,7 @@ function viaLabel(row: PreviewRow, t: SyncSectionProps['t']): string {
     case 'folded': return t('viaFolded')
     case 'basename': return t('viaBasename')
     case 'suffix': return t('viaSuffix')
+    case 'prefix': return t('viaPrefix')
     case 'name': return t('viaName')
     case 'nameSuffix': return t('viaNameSuffix')
     default: return ''
