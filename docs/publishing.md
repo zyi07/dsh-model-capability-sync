@@ -6,7 +6,8 @@ npm 账号，仓库里只做准备工作。
 ## 1. 发布前检查清单
 
 - [ ] `npm run typecheck` 通过（宿主 + 浏览器两端）
-- [ ] `npm run verify:package` 通过（22 项自检：清单字段、产物存在、patch 内容、
+- [ ] `npm run test:rename && npm run test:match && npm run test:sort` 全绿（35 条）
+- [ ] `npm run verify:package` 通过（25 项自检：清单字段、产物存在、patch 内容、
       client 包装、宿主零第三方 import）
 - [ ] `npm run build` 通过，且 `lib/index.js`、`lib/client.js` 是刚构建的
 - [ ] `npm run pack:check` 清单正确：含 `lib/`、`src/`、`scripts/`、
@@ -86,7 +87,7 @@ description:
 | 仓库加 `dsh-plugin` topic | ⬜ 在仓库 About 里添加 |
 | 描述属实、分类贴合 | ✅ |
 | 官方 `@deepseek-ai/*` 用 `peerDependencies` 而不是 `dependencies` | ✅ |
-| 发布到 npm（预构建安装可跳过 `allowBuilds` 构建授权） | ✅ 0.1.0 |
+| 发布到 npm（预构建安装可跳过 `allowBuilds` 构建授权） | ✅ 0.1.0（0.2.0 待发布） |
 
 收录后会出现在两处：站点 `https://awesome-dsh-plugin.com/p/zyi07/dsh-model-capability-sync/`，
 以及插件市场（`index.json` 格式 1 索引，DSH 0.2.1+ 的「插件 → 发现」读的就是它）。
@@ -139,6 +140,19 @@ DSH 的发现页读取"格式 1"索引，用户把 URL 加到 **插件 → 发�
 - 破坏性改动（配置字段、写入语义）升 **minor**；纯修复升 patch。
   本插件独立版本线，不跟随宿主版本号。
 - 目标宿主升级后，先在真实 GUI 验证一遍再放宽 `engines.dsh`。
+
+### 版本状态
+
+| 版本 | 状态 | 含有什么 |
+| --- | --- | --- |
+| 0.1.0 | **已发布到 npm** | 能力补全、预览表、写入、差异预览、排序（单模式） |
+| 0.2.0 | **本地已完成，未发布** | 名称重定向（`【供应商】`）、排序二选一 + 一键重排、匹配规则扩展（变体标记 / 前缀 / 构建号 / 多级命名空间 / 版本点）、名称降级匹配 |
+
+发布 0.2.0 前需要把 `package.json` 的 `version` 改成 `0.2.0`（当前仓库里还是
+`0.1.0`，因为尚未执行 `npm version`）。
+
+本地离线分发：`npm pack` 产出 `.tgz`，拷到目标机器用
+`dsh plugin add /path/to/dsh-model-capability-sync-0.2.0.tgz` 安装。
 
 ## 7. 出问题怎么办
 

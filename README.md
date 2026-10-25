@@ -70,10 +70,10 @@
 
 **变体标记**包括销售点后缀与路由标签，会循环剥（网关常叠加多个）：
 
-- 后缀：`-high` `-low` `-medium` `-minimal` `-max` `-xhigh` `-thinking` `-preview`
-  `-latest` `-chat` `-tiered` `-disabled` `-trial` `-official` `-free` `-stable`
-  `-experimental` `-reasoning` `-it` `-instruct` `-base` `-pro` `-flash` `-mini`
-  `-nano` `-small` `-large`
+- 后缀（27 个）：`-high` `-low` `-medium` `-minimal` `-max` `-xhigh` `-thinking`
+  `-preview` `-latest` `-chat` `-tiered` `-disabled` `-trial` `-official` `-free`
+  `-stable` `-experimental` `-reasoning` `-it` `-instruct` `-base` `-pro` `-flash`
+  `-mini` `-nano` `-small` `-large`
 - 路由标签：`:free` `:beta` `:nitro` 等 `:xxx`
 - 构建号：尾部纯数字，如 `kimi-k3-1` → `kimi-k3`
 
