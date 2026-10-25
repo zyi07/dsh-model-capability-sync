@@ -65,8 +65,9 @@
 | 4 | 剥变体标记 | `gemini-3.8-flash-tiered` → `gemini-3.8-flash` |
 | 5 | 前缀匹配 | `nemotron-3.5-lightning` → `nemotron-3.5-lightning-30b-a3b` |
 | 6 | 逐段剥供应商前缀 | `cline/dots-studio/dots-3-note-preview:free` → `dots-studio/dots-3-note-preview` |
-| 7 | 显示名称 | `qoder/qfmodel`（名称 `Qwen3.8-Flash`）→ `Qwen3.8-Flash` |
-| 8 | 别名（手工兜底） | 你自己配的 id 映射 |
+| 7 | 去经销商命名空间 | `raccoon/sn-glm-5-3` → `glm-5-3` |
+| 8 | 显示名称 | `qoder/qfmodel`（名称 `Qwen3.8-Flash`）→ `Qwen3.8-Flash` |
+| 9 | 别名（手工兜底） | 你自己配的 id 映射 |
 
 **变体标记**包括销售点后缀与路由标签，会循环剥（网关常叠加多个）：
 
@@ -76,6 +77,17 @@
   `-mini` `-nano` `-small` `-large`
 - 路由标签：`:free` `:beta` `:nitro` 等 `:xxx`
 - 构建号：尾部纯数字，如 `kimi-k3-1` → `kimi-k3`
+
+**版本分隔符双向折叠**：`.`、`-`、`_` 在数字之间视为同一写法。目录里 `sensenova-6.8-flash-lite`
+是点号，而经销商给的 `sn-sensenova-6-8-flash-lite` 是横线，不折叠就永远对不上。
+
+**去经销商命名空间**：有些聚合商在自己的池子前面加 2–4 个字母的标签
+（`raccoon/sn-glm-5-3` 的 `sn-`）。`sn` 不是目录里的供应商 id，只是经销商的缩写。
+规则只接受「剥掉标签后能**精确**命中目录」的情况，所以：
+
+- `sn-glm-5-3` → `glm-5-3` ✅ 命中
+- `raccoon-19b265` → 目录里没有 `19b265`，保持未匹配（**不会**瞎猜）
+- `kimi-k3` 本身精确命中，不会被误当成 `kimi-` + `k3`
 
 这些都不改变模型本身，所以也不该决定能力事实能不能查到。
 
@@ -178,7 +190,7 @@ npm run verify:package   # 发布卫生检查（25 项）
 
 # 单元测试（离线，不需要 profile 或网络）
 npm run test:rename      # 名称重定向规则（11 条）
-npm run test:match       # id 匹配规则（18 条）
+npm run test:match       # id 匹配规则（25 条）
 npm run test:sort        # 两种排序（6 条）
 
 # 真实目录冒烟（需联网）

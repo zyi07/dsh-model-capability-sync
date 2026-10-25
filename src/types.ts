@@ -31,7 +31,7 @@ export interface CapabilityFields {
 }
 
 /** How a gateway id was matched against the catalog. */
-export type MatchVia = 'alias' | 'exact' | 'folded' | 'basename' | 'suffix' | 'prefix' | 'name' | 'nameSuffix'
+export type MatchVia = 'alias' | 'exact' | 'folded' | 'basename' | 'suffix' | 'prefix' | 'vendor' | 'name' | 'nameSuffix'
 
 /** Where the key a `name` match used came from: the stored display name, or its id as a last resort. */
 export type NameSource = 'name' | 'id'

@@ -21,6 +21,7 @@
 | --- | --- | --- |
 | 变体标记剥离 | 正则循环，最多 6 轮 | 网关会叠加多个标记（`gemma-4-26b-a4b-it:free` 同时有 `-it` 和 `:free`），一轮不够 |
 | 前缀匹配 | 惰性构建的前缀索引（`Map`） | 一次分析要查几百个 id，逐次线性扫描目录太慢；索引只在首次使用时构建并复用 |
+| 去经销商命名空间 | 剥标签后必须**精确**命中才接受 | 无条件剥离会把 `raccoon-chat-ml-5-5` 拆成无意义的 `chat-ml-5-5`；精确命中是唯一的护栏 |
 | 排序比较 | 大小写折叠 + 原始 ID 兜底 | 保证同一份配置每次排序结果完全一致，不依赖输入顺序 |
 | 名称重定向 | 纯函数（`rename.ts`），不碰 settings | 规则可单测、可复用；写入仍走官方 settings 服务 |
 
@@ -54,7 +55,7 @@
 
 | 模块 | 性质 | 测试 |
 | --- | --- | --- |
-| `src/match.ts` | 纯（只读 catalog） | `scripts/test-match.mjs`（18 条） |
+| `src/match.ts` | 纯（只读 catalog） | `scripts/test-match.mjs`（25 条） |
 | `src/client/rename.ts` | 纯（字符串进、字符串出） | `scripts/test-rename.mjs`（11 条） |
 | `src/sort.ts` | 纯（比较器） | `scripts/test-sort.mjs`（6 条） |
 | `src/mapping.ts` | 纯（目录条目 → 字段） | 由 `scripts/smoke.mjs` 在真实目录上验证 |

@@ -12,14 +12,39 @@
 | 表头列 | 勾选 / 模型 ID / **名称** / 匹配 / 上下文 / 输出 / 图片 / 当前生效 / 推理档位 |
 | 按钮 | 分析能力、重新下载目录、**重定向**、**重排**、应用 |
 | 排序 | `prefix`（按 ID 前缀分组）/ `redirected`（按 `【供应商】` 分组），均供应商优先 |
-| 匹配阶梯 | 精确 → 折叠 → 版本点 → 剥变体标记 → 前缀 → 逐段剥前缀 → 显示名称 → 别名 |
+| 匹配阶梯 | 精确 → 版本分隔符 → 剥变体标记 → 前缀 → 逐段剥前缀 → 去经销商命名空间 → 显示名称 → 别名 |
 | 名称重定向 | 自动、全量、前缀在**最前**、无前缀归 `【other】`、幂等、只写 `name` |
-| 测试 | 35 条（match 18 / rename 11 / sort 6），`npm run verify:package` 25 项 |
+| 测试 | 42 条（match 25 / rename 11 / sort 6），`npm run verify:package` 25 项 |
 | 目录实测 | 230 个供应商 / 8888 个模型，100% 带 `modalities` |
 
 ---
 
 ## 2026-10-25
+
+### 经销商命名空间识别（`sn-glm-5-3` → `glm-5-3`）
+
+- 用户截图：`raccoon/sn-glm-5-3` 等一批 id 未匹配，而目录里明明有 `glm-5.3`。
+- 归因：经销商在自己池子前加 2–4 字母标签。**`sn` 不是目录里的供应商 id**
+  （查过：`sn` 只匹配到 `snowflake-cortex`，纯属巧合），所以不能靠"短前缀 = 供应商"推断。
+- 另一类问题：版本分隔符写法不一致——目录里是 `sensenova-6.8-flash-lite`（点），
+  经销商给的是 `sn-sensenova-6-8-flash-lite`（横线），单向下划线转横线永远对不上。
+- 改动 `src/match.ts`：
+  - `VENDOR_PREFIX` + `peelVendorNamespace`：剥 2–4 字母标签，**但只有剥后能精确命中
+    目录才接受**。这条护栏是必须的——无条件剥离会把 `raccoon-chat-ml-5-5` 拆成
+    无意义的 `chat-ml-5-5`。
+  - `foldVersionDots` → `versionSpellings`：`./-/ _` 双向互换，返回三种拼写依次试。
+  - `resolveId` 重构为 `lookupExact`（精确 + 大小写 + 版本拼写）+ 剥标记 + 前缀 + 剥经销商。
+  - `MatchVia` 加 `vendor`，界面显示「去供应商前缀」。
+- 实测（真实目录 8929 个模型）：
+  - 命中 5 个：`sn-glm-5-3`、`sn-glm-5-3-flash`、`sn-kimi-k3`、`sn-deepseek-v4-1-flash`、
+    `sn-deepseek-v4-1-flash-1017`、`sn-sensenova-6-8-flash-lite`
+  - **对照组全部正确**：`kimi/kimi-k3` 仍精确命中自己，没被误剥成 `k3`；
+    `DeepSeek-Flash` 正确选中第一方 `deepseek/deepseek-flash` 而非聚合站 `302ai`
+  - 仍 miss 的是目录里确实没有的：`sn-sensenova-6-8-flash`（只有 `-lite`）、
+    `raccoon-19b265`/`405a1c`/`8c4485`/`chat-ml-5-5`、`GLM3.5-Flash`（目录无 3.5 代 GLM）
+- 测试 match 18 → **25 条**（新增 7 条：剥离成功、剥后仍剥构建号、分隔符双向、
+  剥不成不瞎猜、本身像前缀的模型不被剥、精确优先于剥离、第一方优先）。
+- 全套 42 条全绿，typecheck/build/verify 通过，bundle 已部署。
 
 ### 全部文档对齐代码
 

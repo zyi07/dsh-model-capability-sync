@@ -161,3 +161,72 @@ test('an opaque id still resolves through its display name', () => {
 test('nothing matches when no rule reaches the catalog', () => {
   assert.equal(matchModel(wide, '1fmodel'), undefined)
 })
+
+// --- a reseller's namespace around an upstream id ---
+
+/** Catalog shapes taken from the real one: same model under many providers. */
+const reseller = catalogOf([
+  ['empiriolabs', 'glm-5-3'],
+  ['empiriolabs', 'glm-5-3-flash'],
+  ['alibaba', 'kimi-k3'],
+  ['empiriolabs', 'deepseek-v4-1-flash'],
+  ['empiriolabs', 'deepseek-v4-1-flash-1017'],
+  ['sensenova', 'sensenova-6.8-flash-lite'],
+  ['deepseek', 'deepseek-flash'],
+  ['302ai', 'deepseek-flash'],
+  ['orcarouter', 'kimi/kimi-k3'],
+])
+
+test('a reseller namespace is peeled off when the rest resolves exactly', () => {
+  for (const [id, want] of [
+    ['raccoon/sn-glm-5-3', 'glm-5-3'],
+    ['raccoon/sn-glm-5-3-flash', 'glm-5-3-flash'],
+    ['raccoon/sn-kimi-k3', 'kimi-k3'],
+    ['raccoon/sn-deepseek-v4-1-flash', 'deepseek-v4-1-flash'],
+  ]) {
+    const hit = matchModel(reseller, id)
+    assert.equal(hit?.modelId, want, id)
+    assert.equal(hit?.via, 'vendor', id)
+  }
+})
+
+test('peeling still strips a build number on what is left', () => {
+  const hit = matchModel(reseller, 'raccoon/sn-deepseek-v4-1-flash-1017')
+  assert.equal(hit?.modelId, 'deepseek-v4-1-flash-1017')
+  assert.equal(hit?.via, 'vendor')
+})
+
+test('the version separator folds whichever way the reseller spells it', () => {
+  const hit = matchModel(reseller, 'raccoon/sn-sensenova-6-8-flash-lite')
+  assert.equal(hit?.modelId, 'sensenova-6.8-flash-lite')
+  assert.equal(hit?.via, 'vendor')
+})
+
+test('peeling never fires when what is left is not a real id', () => {
+  // `chat-ml-5-5` looks like a namespace plus a name, but the catalog has
+  // neither, so the id must stay unmatched rather than resolve to a guess.
+  assert.equal(matchModel(reseller, 'raccoon/raccoon-chat-ml-5-5'), undefined)
+  assert.equal(matchModel(reseller, 'raccoon/raccoon-19b265'), undefined)
+})
+
+test('a model whose own name looks prefixed is not peeled', () => {
+  // `kimi-k3` matches exactly, so the `kimi-` shape is never treated as a
+  // namespace: an exact hit always wins over peeling.
+  const hit = matchModel(reseller, 'kimi-k3')
+  assert.equal(hit?.modelId, 'kimi-k3')
+  assert.notEqual(hit?.via, 'vendor')
+})
+
+test('an exact id outranks a reseller peel', () => {
+  // `sensenova-6.8-flash-lite` is itself a catalog id, so it is found as one;
+  // nothing tries to read `sensenova-` as a namespace.
+  const hit = matchModel(reseller, 'sensenova-6.8-flash-lite')
+  assert.equal(hit?.provider, 'sensenova')
+  assert.equal(hit?.via, 'exact')
+})
+
+test('a namespaced entry resolves to a first-party provider when one exists', () => {
+  // Both 302ai and deepseek publish `deepseek-flash`; the vendor entry wins.
+  const hit = matchModel(reseller, 'deepseek-flash')
+  assert.equal(hit?.provider, 'deepseek')
+})

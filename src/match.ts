@@ -39,6 +39,19 @@ const ROUTE_TAG = /:[a-z0-9][a-z0-9_-]*$/i
 const BUILD_NUMBER = /-\d{1,2}$/
 
 /**
+ * A reseller's own namespace wrapped around an upstream id: `sn-glm-5-3`.
+ *
+ * Aggregators (raccoon and friends) put a two-to-four letter tag in front of the
+ * upstream id to mark which of their pools it comes from. `sn` is not a provider
+ * id in the catalog — it is the reseller's abbreviation — so the tag carries no
+ * information about the model. Only a tag that, once removed, leaves the exact
+ * upstream id is accepted (see {@link resolveVendorPrefix}), which is what keeps
+ * a genuinely namespaced id like `kimi-k3` from being mistaken for a prefixed
+ * one.
+ */
+const VENDOR_PREFIX = /^([a-z]{2,4})-(.+)$/i
+
+/**
  * Strip every variant marker from one key, repeatedly.
  *
  * Gateways stack markers (`gemma-4-26b-a4b-it:free` carries both `-it` and
@@ -175,17 +188,21 @@ function prefixesOf(catalog: Catalog): Map<string, CatalogEntry[]> {
 }
 
 /**
- * Rewrite a version dot into a dash: `claude-sonnet-4.5` → `claude-sonnet-4-5`.
+ * Every spelling of a version inside one key: dash form and dot form.
  *
- * Vendors publish either spelling for the same model and the catalog usually
- * holds only one of them. Only a dot between two digits is rewritten, so
- * `gpt-4.1-mini` folds while a date-like or decimal tail is left to the caller.
+ * Vendors publish either spelling for the same model and the catalog holds only
+ * one of them: `claude-sonnet-4.5` sits beside `claude-sonnet-4-5`, and a
+ * reseller may use the opposite one from the entry it wraps
+ * (`sn-sensenova-6-8-flash-lite` against the catalog's
+ * `sensenova-6.8-flash-lite`). Only a separator between two digits is rewritten,
+ * so `gpt-4.1-mini` folds while a word boundary like `gpt-4-mini` is untouched.
  * @param key - one candidate id.
- * @returns the folded key, or undefined when there was no dot to fold.
+ * @returns the key first, then its folded spellings.
  */
-function foldVersionDots(key: string): string | undefined {
-  const folded = key.replace(/(\d)\.(\d)/g, '$1-$2')
-  return folded === key ? undefined : folded
+function versionSpellings(key: string): string[] {
+  const dashed = key.replace(/(\d)[-_.](\d)/g, '$1-$2')
+  const dotted = key.replace(/(\d)[-_.](\d)/g, '$1.$2')
+  return [...new Set([key, dashed, dotted])]
 }
 
 /** Build the public match record for one chosen entry. */
@@ -202,52 +219,88 @@ function describe(entry: CatalogEntry, via: MatchVia): MatchInfo {
 /**
  * Look a key up through every id-only rule, strictest first.
  *
- * The ladder is: exact → case-folded → version dots folded → variant markers
- * stripped → prefix of a longer catalog id. Each step only widens the net, and
- * the step that fired is reported so the table can say how sure the answer is.
+ * The ladder is: exact → version spelled the other way → variant markers
+ * stripped → a reseller's namespace peeled off, then the same rules again on
+ * what is left. Each step only widens the net, and the step that fired is
+ * reported so the table can say how sure the answer is.
  * @param catalog - the indexed catalog.
  * @param key - one candidate id.
  * @returns the chosen entry and the rule that found it, or undefined.
  */
 function resolveId(catalog: Catalog, key: string): { entry: CatalogEntry; via: MatchVia } | undefined {
-  const direct = lookup(catalog, key)
-  if (direct !== undefined) {
-    const entry = pickBest(direct.entries)
-    if (entry !== undefined) return { entry, via: direct.via }
-  }
+  const exact = lookupExact(catalog, key)
+  if (exact !== undefined) return exact
 
-  const dotted = foldVersionDots(key)
-  if (dotted !== undefined) {
-    const hit = lookup(catalog, dotted)
-    if (hit !== undefined) {
-      const entry = pickBest(hit.entries)
-      if (entry !== undefined) return { entry, via: 'folded' }
+  const withoutMarkers = stripMarkers(key)
+  if (withoutMarkers !== undefined) {
+    const hit = lookupExact(catalog, withoutMarkers)
+    if (hit !== undefined) return { entry: hit.entry, via: 'suffix' }
+
+    // A gateway that truncates the tail (`nemotron-3.5-lightning` for the
+    // catalog's `nemotron-3.5-lightning-30b-a3b`) leaves a prefix of a longer
+    // catalog id.
+    const prefixed = prefixesOf(catalog).get(withoutMarkers.toLowerCase())
+    if (prefixed !== undefined) {
+      const entry = pickBest(prefixed)
+      if (entry !== undefined) return { entry, via: 'prefix' }
     }
   }
 
-  const stripped = stripMarkers(key)
-  if (stripped !== undefined) {
-    // The stripped key may itself be spelled with dots (`gemma-4-26b-a4b-it`
-    // strips to `gemma-4-26b-a4b`, but `claude-sonnet-4.5-thinking` strips to
-    // `claude-sonnet-4.5`), so fold once more before searching.
-    for (const candidate of [stripped, foldVersionDots(stripped)]) {
-      if (candidate === undefined || candidate.length === 0) continue
-      const hit = lookup(catalog, candidate)
-      if (hit !== undefined) {
-        const entry = pickBest(hit.entries)
-        if (entry !== undefined) return { entry, via: 'suffix' }
-      }
-      // A gateway that truncates the tail (`nemotron-3.5-lightning` for
-      // `nemotron-3.5-lightning-30b-a3b`) leaves a prefix of the catalog id.
-      const prefixed = prefixesOf(catalog).get(candidate.toLowerCase())
-      if (prefixed !== undefined) {
-        const entry = pickBest(prefixed)
-        if (entry !== undefined) return { entry, via: 'prefix' }
-      }
+  // A reseller wraps the upstream id in its own namespace (`sn-glm-5-3` for
+  // `glm-5-3`). This runs last among the id rules because it removes real text:
+  // the guard is that only a key which then resolves *exactly* is accepted, so
+  // `raccoon-19b265` is not silently turned into `19b265`.
+  const peeled = peelVendorNamespace(key)
+  if (peeled !== undefined) {
+    const hit = lookupExact(catalog, peeled)
+    if (hit !== undefined) return { entry: hit.entry, via: 'vendor' }
+
+    const peeledStripped = stripMarkers(peeled)
+    if (peeledStripped !== undefined) {
+      const again = lookupExact(catalog, peeledStripped)
+      if (again !== undefined) return { entry: again.entry, via: 'vendor' }
     }
   }
 
   return undefined
+}
+
+/**
+ * Exact, case-folded, and version-spelled-the-other-way lookup, in that order.
+ * @param catalog - the indexed catalog.
+ * @param key - one candidate id.
+ * @returns the chosen entry and the rule, or undefined.
+ */
+function lookupExact(catalog: Catalog, key: string): { entry: CatalogEntry; via: MatchVia } | undefined {
+  const spellings = versionSpellings(key)
+  for (const [position, spelling] of spellings.entries()) {
+    const hit = lookup(catalog, spelling)
+    if (hit === undefined) continue
+    const entry = pickBest(hit.entries)
+    if (entry === undefined) continue
+    // The key's own spelling keeps the rule that matched it; a folded spelling
+    // is reported as `folded`.
+    return { entry, via: position === 0 ? hit.via : 'folded' }
+  }
+  return undefined
+}
+
+/**
+ * Remove a reseller's leading namespace from one id.
+ *
+ * Only the shape `xxx-rest` is considered, where `xxx` is two to four letters —
+ * long enough to be an abbreviation, short enough to not be a model family.
+ * The caller must verify the result resolves exactly; without that check this
+ * would happily split `raccoon-chat-ml-5-5` into the meaningless `chat-ml-5-5`.
+ * @param key - one candidate id.
+ * @returns the id without its namespace, or undefined when there is none.
+ */
+function peelVendorNamespace(key: string): string | undefined {
+  const match = VENDOR_PREFIX.exec(key)
+  if (match === null) return undefined
+  const rest: string | undefined = match[2]
+  if (rest === undefined || rest.length < 3) return undefined
+  return rest
 }
 
 /**
