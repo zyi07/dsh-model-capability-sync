@@ -112,3 +112,39 @@ export function isBlank(value: unknown): boolean {
   if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0
   return false
 }
+
+/**
+ * Replace one provider's model list inside a descriptor, keeping everything
+ * else it carries.
+ *
+ * A write updates the configuration, so the descriptor the page holds must
+ * follow: otherwise the next rebuild from that descriptor (a sort-mode switch,
+ * a provider switch, a conflict reload) hands back the pre-write models and the
+ * names that were just applied disappear. This is the pure half of that update,
+ * separated so it can be tested without a running settings service.
+ *
+ * Only `providers[key].models` moves. Other providers, and other fields of this
+ * provider and its models, are carried over untouched.
+ * @param descriptor - the descriptor as the page held it.
+ * @param providerKey - which provider was written.
+ * @param models - the list that was written.
+ * @param revision - the revision the service answered with, when it gave one.
+ * @returns a new descriptor; the input is not mutated.
+ */
+export function withWrittenModels(
+  descriptor: SettingsDescriptor,
+  providerKey: string,
+  models: readonly ModelDraft[],
+  revision: number | undefined,
+): SettingsDescriptor {
+  const providers = providersOf(descriptor)
+  const provider = providers[providerKey]
+  const nextProviders = provider === undefined
+    ? providers
+    : { ...providers, [providerKey]: { ...provider, models: [...models] } }
+  return {
+    ...descriptor,
+    ...revision === undefined ? {} : { revision },
+    value: { ...descriptor.value, providers: nextProviders },
+  }
+}

@@ -5,13 +5,13 @@
  * Pure props — no context access, no subscriptions. Everything arrives through
  * the inject face `apply` builds, including the bound translate function.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { CapabilityFields, LiveResponse, LiveRow, PreviewResponse, PreviewRow, RpcEnvelope } from '../types.ts'
 import type { SortMode } from '../sort.ts'
 import { sortByModelId } from '../sort.ts'
 import type { ModelDraft, SettingsDescriptor, SettingsInjected, SettingsPathOp } from './shared.ts'
-import { isBlank, modelsOf, providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf, textOf } from './shared.ts'
+import { isBlank, modelsOf, providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf, textOf, withWrittenModels } from './shared.ts'
 import { planNames, renameModels, redirectName } from './rename.ts'
 
 /** What `apply` injects into this component. */
@@ -157,6 +157,15 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const [targetNs, setTargetNs] = useState(TARGET_DEFAULT)
   const [providerKey, setProviderKey] = useState('')
   const [models, setModels] = useState<ModelDraft[]>([])
+  /**
+   * The same list as `models`, readable synchronously.
+   *
+   * Two writes in a row (rename, then reorder) run before React has committed
+   * the first `setModels`, so the second handler would sort the pre-rename list
+   * and write the old names back. Reading the ref instead of the state closes
+   * that gap.
+   */
+  const modelsRef = useRef<ModelDraft[]>([])
   const [rows, setRows] = useState<PreviewRow[] | undefined>(undefined)
   const [liveRows, setLiveRows] = useState<ReadonlyMap<string, LiveRow>>(new Map())
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
@@ -213,7 +222,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       const firstKey = Object.keys(providers)[0] ?? ''
       setTargetNs(target.ns)
       setProviderKey(firstKey)
-      setModels(sortedModelsOf(providers[firstKey], mode))
+      putModels(sortedModelsOf(providers[firstKey], mode))
       setRows(undefined)
       setLiveRows(new Map())
       setSelected(new Set())
@@ -233,7 +242,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     const resolved = key !== '' && providers[key] !== undefined ? key : Object.keys(providers)[0] ?? ''
     setTargetNs(ns)
     setProviderKey(resolved)
-    setModels(sortedModelsOf(providers[resolved], mode))
+    putModels(sortedModelsOf(providers[resolved], mode))
     setRows(undefined)
     setLiveRows(new Map())
     setSelected(new Set())
@@ -256,7 +265,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     const list = await describeSettings()
     setDescriptors(list)
     const descriptor = list.find(entry => entry.ns === targetNs)
-    if (descriptor !== undefined) setModels(sortedModelsOf(providersOf(descriptor)[providerKey], sortMode))
+    if (descriptor !== undefined) putModels(sortedModelsOf(providersOf(descriptor)[providerKey], sortMode))
   }
 
   /** Preselect every row that would actually change. */
@@ -321,7 +330,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const setSortModeAndApply = (mode: SortMode): void => {
     setSortMode(mode)
     const descriptor = descriptors.find(entry => entry.ns === targetNs)
-    if (descriptor !== undefined) setModels(sortedModelsOf(providersOf(descriptor)[providerKey], mode))
+    if (descriptor !== undefined) putModels(sortedModelsOf(providersOf(descriptor)[providerKey], mode))
   }
 
   /** Switch the overwrite mode and follow it with the selection. */
@@ -331,17 +340,50 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     selectChanging(rows, models, mode)
   }
 
+  /**
+   * Replace the model list, keeping the synchronous mirror in step.
+   *
+   * All writers and loaders go through this so `modelsRef.current` is always
+   * the list the latest render would show.
+   * @param next - the list to show.
+   */
+  const putModels = (next: ModelDraft[]): void => {
+    modelsRef.current = next
+    setModels(next)
+  }
+
+  /**
+   * Record a successful write: the new list and its revision replace what the
+   * held descriptor says, and the on-screen list follows.
+   *
+   * Without this the descriptor kept the pre-write models while `models` held
+   * the new ones, so anything that rebuilt the list from the descriptor — a
+   * sort-mode switch, a provider switch, a conflict reload — put the old names
+   * back. That is the "rename then reorder loses the names" report.
+   * @param ordered - the list that was just written.
+   * @param view - the namespace view the settings service answered with.
+   */
+  const commitWrite = (ordered: ModelDraft[], view: SettingsDescriptor): void => {
+    putModels(ordered)
+    setDescriptors(previous => previous.map(entry =>
+      entry.ns === targetNs
+        ? withWrittenModels(entry, providerKey, ordered, view.revision)
+        : entry))
+  }
+
   /** Rename all models that would change: one-shot action. */
   const doRename = async (): Promise<void> => {
     const descriptor = descriptors.find(entry => entry.ns === targetNs)
     if (descriptor === undefined) return
+    // Read the live list: a write may have landed since the last render.
+    const live = modelsRef.current
     // Auto-redirect now applies to ALL models, not just those with changes
-    const targets = new Set(models.map(model => textOf(model, 'id')))
+    const targets = new Set(live.map(model => textOf(model, 'id')))
     if (targets.size === 0) {
       setNotice(t('redirectNoChanges'))
       return
     }
-    const renamed = renameModels(models, targets)
+    const renamed = renameModels(live, targets)
     setRenaming(true)
     setErrorText(undefined)
     setNotice(undefined)
@@ -352,11 +394,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
         path: ['providers', providerKey, 'models'],
         value: ordered,
       }], descriptor.revision)
-      setModels(ordered)
-      setDescriptors(previous => previous.map(entry =>
-        entry.ns === targetNs && typeof view.revision === 'number'
-          ? { ...entry, revision: view.revision }
-          : entry))
+      commitWrite(ordered, view)
       setNotice(`${t('redirectApplied', { count: renamed.written })}`)
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : String(error))
@@ -373,17 +411,13 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     setErrorText(undefined)
     setNotice(undefined)
     try {
-      const ordered = sortByModelId(models, model => textOf(model, 'id'), model => textOf(model, 'name'), sortMode)
+      const ordered = sortByModelId(modelsRef.current, model => textOf(model, 'id'), model => textOf(model, 'name'), sortMode)
       const view = await mutateSettings(targetNs, [{
         op: 'set',
         path: ['providers', providerKey, 'models'],
         value: ordered,
       }], descriptor.revision)
-      setModels(ordered)
-      setDescriptors(previous => previous.map(entry =>
-        entry.ns === targetNs && typeof view.revision === 'number'
-          ? { ...entry, revision: view.revision }
-          : entry))
+      commitWrite(ordered, view)
       setNotice(t('reordered'))
     } catch (error) {
       setErrorText(error instanceof Error ? error.message : String(error))
@@ -404,7 +438,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       return
     }
     let written = 0
-    const next = models.map((model) => {
+    const next = modelsRef.current.map((model) => {
       const entry = targets.get(textOf(model, 'id'))
       if (entry?.row.fields === undefined) return model
       written += 1
@@ -422,12 +456,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
         path: ['providers', providerKey, 'models'],
         value: ordered,
       }], descriptor.revision)
-      setModels(ordered)
-      // Keep the held revision current, so a second apply does not conflict.
-      setDescriptors(previous => previous.map(entry =>
-        entry.ns === targetNs && typeof view.revision === 'number'
-          ? { ...entry, revision: view.revision }
-          : entry))
+      commitWrite(ordered, view)
       setNotice(t('applied', { count: written }))
       await refreshLive(providerKey, next.map(model => textOf(model, 'id')).filter(id => id.length > 0))
     } catch (error) {

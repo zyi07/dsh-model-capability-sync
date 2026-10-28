@@ -48,7 +48,8 @@
     "typecheck:client": "tsc -p tsconfig.client.json --noEmit",
     "prepublishOnly": "npm run typecheck && npm run build && npm run verify:package",
     "verify:package": "node scripts/verify-package.mjs",
-    "pack:check": "npm pack --dry-run"
+    "pack:check": "npm pack --dry-run",
+    "test:write-merge": "node --experimental-strip-types --test scripts/test-write-merge.mjs"
   },
   "keywords": [
     "dsh",
