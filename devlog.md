@@ -19,7 +19,44 @@
 
 ---
 
-## 2026-10-25
+## 2026-10-28
+
+### 修复：写入名称后重排，名称丢失
+
+**现象**（用户报告）：先点「重定向」写入名称，再点「重排」，刚写入的名称消失；
+单独点「重排」也有概率丢失。
+
+**根因**（两处，都是状态管理问题）：
+
+1. **descriptor 陈旧**：三个写函数成功后只更新了 `descriptor.revision`，
+   没有更新 `descriptor.value.providers[key].models`。而
+   `setSortModeAndApply` / `showProvider` / `reloadConfig` 三处都会**从 descriptor
+   重建 `models`**，于是把写入前的旧名称拿了回来。这是必现路径。
+2. **异步状态竞争**：`setModels` 是异步的。连续点两次（重定向→重排），
+   第二次处理函数读到的 `models` 可能仍是写入前的值，于是用旧列表排序后写回。
+   这是「有概率丢失」的原因。
+
+**修复**：
+
+- `shared.ts` 新增纯函数 `withWrittenModels(descriptor, providerKey, models, revision)`：
+  只替换 `providers[key].models`，其余供应商、其余字段原样保留；不修改入参。
+- `SyncSection` 新增 `commitWrite(ordered, view)`：写成功后同时更新 `models` 与
+  descriptor，三个写函数（重定向 / 重排 / 应用）统一走它。
+- 新增 `modelsRef`（`useRef`）+ `putModels()`：所有设置 `models` 的地方都同步 ref，
+  写函数改为读 `modelsRef.current`，消除连续点击的竞态。
+
+**验证**：
+
+- 新增 `scripts/test-write-merge.mjs`（6 条），其中最后一条正是「重定向后再重排
+  名称不丢」。另用脚本复现修复前行为：从陈旧 descriptor 重建确实拿回旧名称。
+- 全套 48 条测试全绿（rename 11 / match 25 / sort 6 / write-merge 6），
+  typecheck 0 错误，verify 25 项通过，bundle 已部署。
+- 提交 `94cb7c5`，已推送 GitHub。
+
+**待做什么**：
+
+- 用户刷新页面验证：重定向 → 重排，名称应保留。
+- 发 0.2.0 到 npm（需维护者账号）。
 
 ### 经销商命名空间识别（`sn-glm-5-3` → `glm-5-3`）
 
