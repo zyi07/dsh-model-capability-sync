@@ -19,7 +19,41 @@
 
 ---
 
-## 2026-10-28
+## 2026-11-12
+
+### 千问系列匹配不上 + 表头显示 `colName`
+
+**现象**（用户截图）：`auto/Qwen3.8 Flash`、`auto/Qwen3.8 Max`、`auto/Qwen4` 三个未匹配；
+表头一列直接显示 `colName` 而不是「名称」。
+
+**根因一：空格跨不过去**
+显示名称是 `Qwen3.8 Flash`（空格），目录里是 `qwen3.8-flash`（横线）。大小写、版本点、
+变体标记、前缀、经销商剥离——所有规则都在处理"同一形态的不同拼法"，没有一条能处理
+"空格 vs 分隔符"。改 `src/match.ts`：新增 `spellGapsAsDashes`，只改写**候选**，
+仍要求精确命中，所以 `Dots Studio: …` 这类带真实空格的名称不会被硬掰。
+`Qwen4` 是目录里确实没有，保持未匹配。
+
+**根因二：大小写命中窄化了候选集**
+修好空格后能命中了，但选中的是 `scnet-token-plan`（经销商）而不是第一方 `alibaba`。
+原因：`lookup` 精确命中后只返回该大小写的条目——`scnet` 恰好把 id 写成
+`Qwen3.8-Flash`（与标签同大小写），`alibaba` 是 `qwen3.8-flash`。于是一个评分 6 的
+经销商挤掉了评分 11 的第一方。修：精确命中时把同组（忽略大小写）的条目一起交给
+`pickBest` 打分，`via` 仍报 `exact`。
+
+**根因三：`colName` 从未写进字典**
+`SyncSection.tsx:633` 引用 `t('colName')`，但 `locale.ts` 里没有这个键，`t()` 回退成
+键名本身，于是表头显示 `colName`。追溯：这个键是早前一次 `str.replace` 加进去的，
+锚点没命中（字典里写的是「模型 ID」而不是「模型」），脚本没有断言，静默失败。
+修：补上 zh/en 两处，并新增 `scripts/test-locale.mjs`——UI 引用的键只要有一边字典缺
+就报错，两本字典键集不一致也报错。已实测：删掉 `colName` 后 3 条测试立刻失败。
+
+**验证**：
+- 用真实目录复现：修复前三个全 miss；修复后 `Qwen3.8 Flash/Max` 命中且选中第一方
+  `alibaba`（4 项能力），`Qwen4` 仍 miss（目录确实无此模型）。
+- 测试：match 25 → 29，新增 locale 3 条；全套 55 条全绿
+  （rename 11 / match 29 / sort 6 / write-merge 6 / locale 3）。
+- typecheck 0 错误，verify 25 项通过，bundle 已部署。
+- 提交 `692cd9a`，已推送 GitHub。
 
 ### 修复：写入名称后重排，名称丢失
 

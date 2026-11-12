@@ -102,7 +102,11 @@
 - [x] 逐段剥供应商前缀（不只剥 basename）
 - [x] `MatchVia` 新增 `prefix`，界面显示「前缀匹配」
 - [x] 经销商标签剥离（`sn-glm-5-3` → `glm-5-3`），需剥后精确命中；版本分隔符双向折叠
-- [x] `scripts/test-match.mjs` 扩到 25 条
+- [x] 空格转横线（`Qwen3.8 Flash` → `qwen3.8-flash`），只改写候选且需精确命中
+- [x] 大小写命中不再窄化候选集：同一 id 的不同大小写写法一起参与打分，
+      避免经销商凭大写挤掉第一方（`scnet-token-plan` vs `alibaba`）
+- [x] `scripts/test-match.mjs` 扩到 29 条；新增 `test-locale.mjs`（3 条）
+      与 `test-write-merge.mjs`（6 条）
 
 **验收**：那 37 个 id 中 34 个能匹配（剩 3 个是 id 里根本没有模型名、
 或目录里确实没有的）。

@@ -55,7 +55,9 @@
 
 | 模块 | 性质 | 测试 |
 | --- | --- | --- |
-| `src/match.ts` | 纯（只读 catalog） | `scripts/test-match.mjs`（25 条） |
+| `src/match.ts` | 纯（只读 catalog） | `scripts/test-match.mjs`（29 条） |
 | `src/client/rename.ts` | 纯（字符串进、字符串出） | `scripts/test-rename.mjs`（11 条） |
+| `src/client/shared.ts` | 纯（配置对象变换） | `scripts/test-write-merge.mjs`（6 条） |
+| `src/client/locale.ts` | 数据表 | `scripts/test-locale.mjs`（3 条，防键缺失） |
 | `src/sort.ts` | 纯（比较器） | `scripts/test-sort.mjs`（6 条） |
 | `src/mapping.ts` | 纯（目录条目 → 字段） | 由 `scripts/smoke.mjs` 在真实目录上验证 |
