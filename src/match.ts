@@ -139,10 +139,28 @@ function basename(id: string): string {
   return slash === -1 ? id : id.slice(slash + 1)
 }
 
-/** Look one key up exactly, then case-insensitively. */
+/**
+ * Look one key up exactly, then case-insensitively.
+ *
+ * When the key exists verbatim, every entry with the same id ignoring case is
+ * offered as well. Providers disagree about casing for the same model
+ * (`alibaba` publishes `qwen3.8-flash` while `scnet-token-plan` publishes
+ * `Qwen3.8-Flash`), and picking from the verbatim set alone would hand the
+ * choice to whichever reseller happens to capitalise like the label — even when
+ * a first-party entry with better facts exists. The rule reported is still
+ * `exact`: the id did match verbatim, it just is not the only candidate.
+ * @param catalog - the indexed catalog.
+ * @param key - one candidate id.
+ * @returns the entries to choose from and the rule that found them.
+ */
 function lookup(catalog: Catalog, key: string): { entries: readonly CatalogEntry[]; via: MatchVia } | undefined {
   const exact = catalog.byId.get(key)
-  if (exact !== undefined) return { entries: exact, via: 'exact' }
+  if (exact !== undefined) {
+    const folded = catalog.byFolded.get(key.toLowerCase())
+    // `folded` is the same ids with any casing, so it always covers `exact`
+    // when both exist; prefer it to widen the choice, never to narrow it.
+    return { entries: folded !== undefined && folded.length > exact.length ? folded : exact, via: 'exact' }
+  }
   const folded = catalog.byFolded.get(key.toLowerCase())
   if (folded !== undefined) return { entries: folded, via: 'folded' }
   return undefined
@@ -217,6 +235,21 @@ function describe(entry: CatalogEntry, via: MatchVia): MatchInfo {
 }
 
 /**
+ * Look one key up, then the same key with its word gaps written as dashes.
+ * @param catalog - the indexed catalog.
+ * @param key - one candidate id.
+ * @returns the chosen entry and the rule, or undefined.
+ */
+function lookupSpelling(catalog: Catalog, key: string): { entry: CatalogEntry; via: MatchVia } | undefined {
+  const exact = lookupExact(catalog, key)
+  if (exact !== undefined) return exact
+  const dashed = spellGapsAsDashes(key)
+  if (dashed === undefined) return undefined
+  const hit = lookupExact(catalog, dashed)
+  return hit === undefined ? undefined : { entry: hit.entry, via: 'spelling' }
+}
+
+/**
  * Look a key up through every id-only rule, strictest first.
  *
  * The ladder is: exact → version spelled the other way → variant markers
@@ -228,19 +261,23 @@ function describe(entry: CatalogEntry, via: MatchVia): MatchInfo {
  * @returns the chosen entry and the rule that found it, or undefined.
  */
 function resolveId(catalog: Catalog, key: string): { entry: CatalogEntry; via: MatchVia } | undefined {
-  const exact = lookupExact(catalog, key)
+  const exact = lookupSpelling(catalog, key)
   if (exact !== undefined) return exact
 
   const withoutMarkers = stripMarkers(key)
   if (withoutMarkers !== undefined) {
-    const hit = lookupExact(catalog, withoutMarkers)
-    if (hit !== undefined) return { entry: hit.entry, via: 'suffix' }
+    const hit = lookupSpelling(catalog, withoutMarkers)
+    if (hit !== undefined) return { entry: hit.entry, via: hit.via === 'spelling' ? 'spelling' : 'suffix' }
 
     // A gateway that truncates the tail (`nemotron-3.5-lightning` for the
     // catalog's `nemotron-3.5-lightning-30b-a3b`) leaves a prefix of a longer
-    // catalog id.
-    const prefixed = prefixesOf(catalog).get(withoutMarkers.toLowerCase())
-    if (prefixed !== undefined) {
+    // catalog id. A label's word gaps count as dashes here too, so
+    // `Nemotron 3.5 Lightning` reaches the same entry.
+    const prefixes = prefixesOf(catalog)
+    for (const candidate of [withoutMarkers, spellGapsAsDashes(withoutMarkers)]) {
+      if (candidate === undefined) continue
+      const prefixed = prefixes.get(candidate.toLowerCase())
+      if (prefixed === undefined) continue
       const entry = pickBest(prefixed)
       if (entry !== undefined) return { entry, via: 'prefix' }
     }
@@ -252,17 +289,34 @@ function resolveId(catalog: Catalog, key: string): { entry: CatalogEntry; via: M
   // `raccoon-19b265` is not silently turned into `19b265`.
   const peeled = peelVendorNamespace(key)
   if (peeled !== undefined) {
-    const hit = lookupExact(catalog, peeled)
+    const hit = lookupSpelling(catalog, peeled)
     if (hit !== undefined) return { entry: hit.entry, via: 'vendor' }
 
     const peeledStripped = stripMarkers(peeled)
     if (peeledStripped !== undefined) {
-      const again = lookupExact(catalog, peeledStripped)
+      const again = lookupSpelling(catalog, peeledStripped)
       if (again !== undefined) return { entry: again.entry, via: 'vendor' }
     }
   }
 
   return undefined
+}
+
+/**
+ * Write a label's word gaps as dashes: `Qwen3.8 Flash` → `Qwen3.8-Flash`.
+ *
+ * A display name is prose and uses spaces where the catalog uses separators.
+ * `Qwen3.8 Flash` is the catalog's `qwen3.8-flash`, and no case, version or
+ * marker rule can bridge a space — the two strings share no common form. Only
+ * the candidate is rewritten, and the result still has to match exactly, so a
+ * name whose words carry meaning (`Dots Studio: …`) is left unmatched rather
+ * than bent into something else.
+ * @param key - one candidate id.
+ * @returns the gap-free spelling, or undefined when there was no space.
+ */
+function spellGapsAsDashes(key: string): string | undefined {
+  const dashed = key.replace(/\s+/g, '-')
+  return dashed === key ? undefined : dashed
 }
 
 /**

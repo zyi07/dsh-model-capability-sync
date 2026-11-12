@@ -230,3 +230,39 @@ test('a namespaced entry resolves to a first-party provider when one exists', ()
   const hit = matchModel(reseller, 'deepseek-flash')
   assert.equal(hit?.provider, 'deepseek')
 })
+
+// --- a label's word gaps, and casing differences between providers ---
+
+/** Catalog shaped like the Qwen entries: one model, two providers, two casings. */
+const qwen = catalogOf([
+  ['alibaba', 'qwen3.8-flash'],
+  ['scnet-token-plan', 'Qwen3.8-Flash'],
+  ['alibaba', 'qwen3.8-max'],
+])
+
+test('a label whose word gap is a space reaches the dashed id', () => {
+  // The picker shows `Qwen3.8 Flash`; the catalog has `qwen3.8-flash`. No case,
+  // version or marker rule bridges a space, so the gap is written as a dash.
+  const hit = matchModel(qwen, 'auto/Qwen3.8 Flash', {}, '【auto】 Qwen3.8 Flash')
+  assert.equal(hit?.modelId.toLowerCase(), 'qwen3.8-flash')
+  assert.equal(hit?.via, 'spelling')
+})
+
+test('the same gap rule works on the id alone', () => {
+  const hit = matchModel(qwen, 'Qwen3.8 Max')
+  assert.equal(hit?.modelId.toLowerCase(), 'qwen3.8-max')
+  assert.equal(hit?.via, 'spelling')
+})
+
+test('a gap that leads nowhere leaves the id unmatched', () => {
+  // Qwen4 is genuinely absent; the gap rule must not invent a neighbour.
+  assert.equal(matchModel(qwen, 'auto/Qwen4', {}, '【auto】 Qwen4'), undefined)
+})
+
+test('casing never hands the choice to a reseller', () => {
+  // `scnet-token-plan` publishes the id capitalised exactly like the label and
+  // `alibaba` publishes it lower-case. The verbatim hit must not narrow the
+  // field to the reseller, or its numbers become the model's numbers.
+  const hit = matchModel(qwen, 'Qwen3.8 Flash')
+  assert.equal(hit?.provider, 'alibaba')
+})

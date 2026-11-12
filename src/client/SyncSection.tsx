@@ -56,6 +56,7 @@ function viaLabel(row: PreviewRow, t: SyncSectionProps['t']): string {
     case 'suffix': return t('viaSuffix')
     case 'prefix': return t('viaPrefix')
     case 'vendor': return t('viaVendor')
+    case 'spelling': return t('viaSpelling')
     case 'name': return t('viaName')
     case 'nameSuffix': return t('viaNameSuffix')
     default: return ''
