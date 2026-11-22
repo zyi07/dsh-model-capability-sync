@@ -22,7 +22,39 @@
 
 ---
 
-## 2026-11-22（文档同步）
+## 2026-11-22（dshmarket 投稿）
+
+### 提交到 dshmarket：条目已备好，PR 待 token
+
+**关键发现**：dshmarket 的插件列表**不在市场仓库里**。市场 README 第 167 行写明：
+列表来自精选仓库 `awesome-dsh-plugin/awesome-dsh-plugin`，投稿去那边提 PR。
+而该仓库的贡献指南规定：**投稿就是一个 YAML 文件**，
+`data/plugins/<owner>__<repo>.yml`，两个 README 由脚本生成，不得手改。
+
+**已完成（本地）**：
+
+- 克隆该仓库（12,519 个已有条目），确认无同名条目、无同名插件。
+- 写 `data/plugins/zyi07__dsh-model-capability-sync.yml`，`category: model`。
+- 跑 `npm ci` + `node scripts/generate-readme.mjs`：12,520 条目，两个 README 都收录。
+- diff 范围干净：1 个新文件 + 2 个生成的 README，未动他人条目。
+- 分支 `add-dsh-model-capability-sync`，commit `3ad26f5`。
+
+**逐条核对投稿要求**：`dsh.bundle` 已声明（最常见拒绝原因，可排除）、
+`cordis.patch.yml` 存在、真实代码（48 提交 / 61 测试 / npm 0.2.0）、
+仓库 2026-10-21 创建（满 1 天）、描述中每项声明都对过源码
+（四类字段来自 `src/mapping.ts`、写入走 `remote.settings.mutate`、
+只写 `name`、`src/index.ts` 未注册 provider 路由）。
+
+**发现潜在重复**：`11zld22/dsh-model-info-fill` 与 `PerseusNana7mi/dsh-model-kit`
+都从 models.dev 补参数。两者**都没有** `【供应商】` 名称重定向和按供应商重排，
+已在描述与 PR 正文里写明差异，避免按"已被覆盖"驳回。
+
+**阻塞**：本机只有 SSH key，只能推代码；**fork 与开 PR 需要 GitHub token**
+（`POST /repos/.../forks` 返回 401）。另外投稿要求给仓库加 `dsh-plugin` topic，
+实测当前为空，同样需要 token 或网页操作。
+
+材料放在 `/root/deliver/dshmarket/`：条目 YAML、`SUBMIT.md`（两种提交方式）、
+`PR-BODY.md`。
 
 ### README 与里程碑全面对齐 0.2.0
 
