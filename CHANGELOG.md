@@ -3,6 +3,17 @@
 Notable changes, newest first. The plugin follows semantic versioning: the
 settings surface and the config it writes are the public contract.
 
+## 0.2.1
+
+Documentation only — no code or behaviour change.
+
+- The README shipped with 0.2.0 still described the pre-release state, so the
+  npm page showed a milestone table saying publishing was pending while 0.2.0
+  was already `latest`. It now matches the code: nine match rules, the editable
+  capability cells, the fixed-width table, and 61 tests / 26 packaging checks.
+- `P2.9` (layout and hand editing) and `F15.1`–`F15.5` (the rules that work
+  follows) are recorded in the plan and requirements.
+
 ## 0.2.0
 
 Everything below landed after 0.1.0 was published, so 0.1.0 users see the
