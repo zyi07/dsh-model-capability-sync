@@ -11,7 +11,7 @@ import type { CapabilityFields, LiveResponse, LiveRow, PreviewResponse, PreviewR
 import type { SortMode } from '../sort.ts'
 import { sortByModelId } from '../sort.ts'
 import type { ModelDraft, SettingsDescriptor, SettingsInjected, SettingsPathOp } from './shared.ts'
-import { isBlank, modelsOf, providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf, textOf, withWrittenModels } from './shared.ts'
+import { isBlank, mergeFields, modelsOf, parseTokenCount, providersOf, sortedModelsOf, TARGET_DEFAULT, targetLabelOf, textOf, withWrittenModels } from './shared.ts'
 import { planNames, renameModels, redirectName } from './rename.ts'
 
 /** What `apply` injects into this component. */
@@ -35,6 +35,10 @@ interface FieldChange {
 interface PlanRow {
   row: PreviewRow
   model: ModelDraft
+  /** What a write would use: catalog values with typed ones on top. */
+  fields?: CapabilityFields
+  /** The subset that was typed in the table. */
+  manual?: CapabilityFields
   changes: FieldChange[]
 }
 
@@ -74,11 +78,20 @@ function viaLabel(row: PreviewRow, t: SyncSectionProps['t']): string {
  * @param overwrite - replace values the user already set.
  * @returns a new entry; the input is never mutated.
  */
-function mergeModel(model: ModelDraft, fields: CapabilityFields, overwrite: boolean): ModelDraft {
+function mergeModel(
+  model: ModelDraft,
+  fields: CapabilityFields,
+  overwrite: boolean,
+  manual?: CapabilityFields,
+): ModelDraft {
   const next: ModelDraft = { ...model }
   for (const [key, value] of Object.entries(fields)) {
     if (key === 'name' || value === undefined) continue
-    if (!overwrite && !isBlank(next[key])) continue
+    // A value typed in the table is an instruction, not a suggestion: it is
+    // applied even when the entry already holds something and "overwrite" is
+    // off, because that switch is about the catalog replacing stored values.
+    const typed = manual !== undefined && key in manual
+    if (!typed && !overwrite && !isBlank(next[key])) continue
     next[key] = value
   }
   return next
@@ -91,8 +104,13 @@ function mergeModel(model: ModelDraft, fields: CapabilityFields, overwrite: bool
  * @param overwrite - replace values the user already set.
  * @returns one entry per changed field, in field order; empty when nothing moves.
  */
-function changesBetween(model: ModelDraft, fields: CapabilityFields, overwrite: boolean): FieldChange[] {
-  const next = mergeModel(model, fields, overwrite)
+function changesBetween(
+  model: ModelDraft,
+  fields: CapabilityFields,
+  overwrite: boolean,
+  manual?: CapabilityFields,
+): FieldChange[] {
+  const next = mergeModel(model, fields, overwrite, manual)
   const changes: FieldChange[] = []
   for (const key of Object.keys(fields) as Array<keyof CapabilityFields>) {
     const before = model[key]
@@ -118,6 +136,17 @@ function reasoningText(value: unknown): string {
     return keys.length === 0 ? '—' : keys.join(' / ')
   }
   return '—'
+}
+
+/**
+ * Which option the image select should show.
+ * @param value - the effective modality list, manual or stored.
+ * @returns `yes`, `no`, or `default` when it is not set.
+ */
+function imageChoice(value: unknown): 'yes' | 'no' | 'default' {
+  if (Array.isArray(value) && value.includes('image')) return 'yes'
+  if (isBlank(value)) return 'default'
+  return 'no'
 }
 
 /** The image verdict the owning adapter reports right now. */
@@ -146,6 +175,49 @@ function valueCell(change: FieldChange | undefined, current: unknown, format: (v
 }
 
 /**
+ * An editable capability cell: the stored value, with a box to override it.
+ *
+ * The catalog is a suggestion. A proxy route may need a smaller window than the
+ * upstream model advertises, and a model the catalog never listed has no
+ * values at all — so every number here is also typeable, and a typed value
+ * shows next to the catalog one instead of replacing what the catalog said.
+ * @param props - the field, its values and the change for this row.
+ * @returns the cell body.
+ */
+function EditableNumber(props: {
+  field: 'contextWindow' | 'maxTokens'
+  model: ModelDraft
+  manual?: CapabilityFields
+  change?: FieldChange
+  label: string
+  onType: (value: number | undefined) => void
+}): ReactNode {
+  const { field, model, manual, change, label, onType } = props
+  const typed = manual?.[field]
+  const shown = typed !== undefined ? String(typed) : change === undefined ? '' : String(model[field] ?? '')
+  return (
+    <span className="cs-cell">
+      {change === undefined
+        ? null
+        : (
+          <span className="cs-change">
+            <span className="cs-from">{tokens(change.before)}</span>
+            {' → '}{tokens(change.after)}
+          </span>
+        )}
+      <input
+        className={typed !== undefined ? 'cs-input cs-input--cell cs-input--typed' : 'cs-input cs-input--cell'}
+        aria-label={label}
+        inputMode="numeric"
+        value={typed !== undefined ? String(typed) : change === undefined ? (isBlank(model[field]) ? '' : tokens(model[field])) : ''}
+        placeholder={change === undefined ? tokens(model[field]) : tokens(change.after)}
+        onChange={(event) => { onType(parseTokenCount(event.target.value)) }}
+      />
+    </span>
+  )
+}
+
+/**
  * Render the section.
  * @param props - injected wire face plus the bound translate function.
  * @returns the section body.
@@ -168,6 +240,14 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
    */
   const modelsRef = useRef<ModelDraft[]>([])
   const [rows, setRows] = useState<PreviewRow[] | undefined>(undefined)
+  /**
+   * Values typed into the table, keyed by model id then field.
+   *
+   * Held apart from `models` so an edit survives re-analysis: the catalog is a
+   * source of suggestions, and re-querying it must not discard what a person
+   * decided the entry should say.
+   */
+  const [typed, setTyped] = useState<ReadonlyMap<string, CapabilityFields>>(new Map())
   const [liveRows, setLiveRows] = useState<ReadonlyMap<string, LiveRow>>(new Map())
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
   const [overwrite, setOverwrite] = useState(false)
@@ -187,16 +267,21 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     const stored = new Map(models.map(model => [textOf(model, 'id'), model]))
     return rows.map((row) => {
       const model = stored.get(row.id) ?? {}
-      const fields = row.fields
+      const manual = typed.get(row.id)
+      const fields = mergeFields(row.fields, manual)
       return {
         row,
         model,
-        changes: fields === undefined ? [] : changesBetween(model, fields, overwrite),
+        ...fields === undefined ? {} : { fields },
+        ...manual === undefined ? {} : { manual },
+        changes: fields === undefined ? [] : changesBetween(model, fields, overwrite, manual),
       }
     })
   })()
-  const matched = plan.filter(entry => entry.row.fields !== undefined)
-  const unmatched = plan.filter(entry => entry.row.fields === undefined)
+  // A row with no catalog entry is still workable: the whole entry can be
+  // typed by hand, which is the point of the editable cells.
+  const matched = plan.filter(entry => entry.fields !== undefined)
+  const unmatched = plan.filter(entry => entry.fields === undefined)
   const changing = matched.filter(entry => entry.changes.length > 0)
   const changeFields = changing.reduce((total, entry) => total + entry.changes.length, 0)
   const liveImage = matched.filter(entry => liveRows.get(entry.row.id)?.input?.includes('image') === true).length
@@ -427,12 +512,31 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     }
   }
 
+  /**
+   * Record one typed value for a model, or clear it when the box is emptied.
+   * @param id - the gateway model id.
+   * @param key - which capability field.
+   * @param value - the parsed value, or undefined to drop the manual entry.
+   */
+  const typeField = (id: string, key: keyof CapabilityFields, value: unknown): void => {
+    setTyped((previous) => {
+      const next = new Map(previous)
+      const current: CapabilityFields = next.get(id) ?? {}
+      const updated = { ...current } as Record<string, unknown>
+      if (value === undefined) delete updated[key]
+      else updated[key] = value
+      if (Object.keys(updated).length === 0) next.delete(id)
+      else next.set(id, updated as CapabilityFields)
+      return next
+    })
+  }
+
   /** Write the selected rows into the provider entry. */
   const applyRows = async (): Promise<void> => {
     const descriptor = descriptors.find(entry => entry.ns === targetNs)
     if (descriptor === undefined) return
     const targets = new Map(changing
-      .filter(entry => selected.has(entry.row.id))
+      .filter(entry => selected.has(entry.row.id) && entry.fields !== undefined)
       .map(entry => [entry.row.id, entry]))
     if (targets.size === 0) {
       setNotice(t('nothingSelected'))
@@ -441,9 +545,9 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
     let written = 0
     const next = modelsRef.current.map((model) => {
       const entry = targets.get(textOf(model, 'id'))
-      if (entry?.row.fields === undefined) return model
+      if (entry?.fields === undefined) return model
       written += 1
-      return mergeModel(model, entry.row.fields, overwrite)
+      return mergeModel(model, entry.fields, overwrite, entry.manual)
     })
     setBusy('applying')
     setErrorText(undefined)
@@ -495,7 +599,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
   const candidates = descriptors.filter(entry => Object.keys(providersOf(entry)).length > 0)
   const providerKeys = Object.keys(providersOf(descriptor))
   const needle = query.trim().toLowerCase()
-  const visible = matched.filter((entry) => {
+  const visible = plan.filter((entry) => {
     if (onlyChanged && entry.changes.length === 0) return false
     if (needle === '') return true
     return entry.row.id.toLowerCase().includes(needle)
@@ -590,9 +694,10 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
       {catalogInfo !== undefined ? <p className="cs-hint">{catalogInfo}</p> : null}
       {staleInfo !== undefined ? <p className="cs-warn">{staleInfo}</p> : null}
 
-      {rows !== undefined && matched.length > 0
+      {rows !== undefined && plan.length > 0
         ? (
           <>
+            <p className="cs-hint">{t('editHint')}</p>
             <div className="cs-row">
               <input
                 className="cs-input"
@@ -617,6 +722,17 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
               : (
                 <div className="cs-table-wrap">
                   <table className="cs-table">
+                    <colgroup>
+                      <col className="cs-col-check" />
+                      <col className="cs-col-id" />
+                      <col className="cs-col-name" />
+                      <col className="cs-col-match" />
+                      <col className="cs-col-context" />
+                      <col className="cs-col-output" />
+                      <col className="cs-col-image" />
+                      <col className="cs-col-live" />
+                      <col className="cs-col-reasoning" />
+                    </colgroup>
                     <thead>
                       <tr>
                         <th>
@@ -641,7 +757,8 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
                       </tr>
                     </thead>
                     <tbody>
-                      {visible.map(({ row, model, changes }) => {
+                      {visible.map((entry) => {
+                        const { row, model, changes } = entry
                         const changeOf = (key: keyof CapabilityFields): FieldChange | undefined =>
                           changes.find(change => change.key === key)
                         return (
@@ -660,13 +777,59 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
                               {redirectName(row.id, textOf(model, 'name')).after}
                             </td>
                             <td className="cs-dim">
-                              {row.match === undefined ? '—' : `${row.match.provider}/${row.match.modelId}`}
-                              {' '}<span className="cs-badge">{viaLabel(row, t)}</span>
+                              {row.match === undefined
+                                ? <span className="cs-badge">{t('notListed')}</span>
+                                : (
+                                  <>
+                                    {`${row.match.provider}/${row.match.modelId}`}
+                                    {' '}<span className="cs-badge">{viaLabel(row, t)}</span>
+                                  </>
+                                )}
                             </td>
-                            <td>{valueCell(changeOf('contextWindow'), model.contextWindow, tokens)}</td>
-                            <td>{valueCell(changeOf('maxTokens'), model.maxTokens, tokens)}</td>
                             <td>
-                              {valueCell(changeOf('input'), model.input, value => imageText(value, t))}
+                              <EditableNumber
+                                field="contextWindow"
+                                label={`${row.id} ${t('colContext')}`}
+                                model={model}
+                                manual={entry.manual}
+                                change={changeOf('contextWindow')}
+                                onType={(value) => { typeField(row.id, 'contextWindow', value) }}
+                              />
+                            </td>
+                            <td>
+                              <EditableNumber
+                                field="maxTokens"
+                                label={`${row.id} ${t('colOutput')}`}
+                                model={model}
+                                manual={entry.manual}
+                                change={changeOf('maxTokens')}
+                                onType={(value) => { typeField(row.id, 'maxTokens', value) }}
+                              />
+                            </td>
+                            <td>
+                              <select
+                                className={entry.manual?.input === undefined ? 'cs-select cs-select--cell' : 'cs-select cs-select--cell cs-select--typed'}
+                                aria-label={`${row.id} ${t('colImage')}`}
+                                value={imageChoice(entry.manual?.input ?? model.input)}
+                                onChange={(event) => {
+                                  const choice = event.target.value
+                                  typeField(row.id, 'input', choice === 'default'
+                                    ? undefined
+                                    : choice === 'yes' ? ['text', 'image'] : ['text'])
+                                }}
+                              >
+                                <option value="default">{imageText(model.input, t)}</option>
+                                <option value="yes">{t('imageYes')}</option>
+                                <option value="no">{t('imageNo')}</option>
+                              </select>
+                              {changeOf('input') === undefined
+                                ? null
+                                : (
+                                  <span className="cs-change cs-change--block">
+                                    <span className="cs-from">{imageText(changeOf('input')?.before, t)}</span>
+                                    {' → '}{imageText(changeOf('input')?.after, t)}
+                                  </span>
+                                )}
                             </td>
                             <td>
                               <span className={liveRows.get(row.id)?.input?.includes('image') === true ? 'cs-badge cs-badge--image' : 'cs-dim'}>
@@ -701,21 +864,7 @@ export function SyncSection(props: SyncSectionProps): ReactNode {
         )
         : null}
 
-      {unmatched.length > 0
-        ? (
-          <div>
-            <p className="cs-hint">{t('unmatchedHint')}</p>
-            <ul className="cs-unmatched">
-              {unmatched.map(entry => (
-                <li key={entry.row.id}>
-                  {entry.row.id}
-                  {entry.row.reason === undefined ? null : <span className="cs-dim"> — {entry.row.reason}</span>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )
-        : null}
+      {unmatched.length > 0 ? <p className="cs-hint">{t('unmatchedHint', { count: unmatched.length })}</p> : null}
     </div>
   )
 }

@@ -155,7 +155,22 @@ const SECTION_CSS = `
   max-height: 460px; overflow: auto; margin-bottom: 12px;
   border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px;
 }
-.cs-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
+/* Fit the columns to the panel: ids and names wrap rather than push the table
+   wider than the space it has. Scrolling horizontally stays possible as a last
+   resort for a very narrow window, it just is not the normal state. */
+.cs-table {
+  width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px;
+  table-layout: fixed;
+}
+.cs-table col.cs-col-check { width: 28px; }
+.cs-table col.cs-col-id { width: 17%; }
+.cs-table col.cs-col-name { width: 17%; }
+.cs-table col.cs-col-match { width: 19%; }
+.cs-table col.cs-col-context { width: 9%; }
+.cs-table col.cs-col-output { width: 9%; }
+.cs-table col.cs-col-image { width: 8%; }
+.cs-table col.cs-col-live { width: 7%; }
+.cs-table col.cs-col-reasoning { width: 14%; }
 .cs-table th {
   position: sticky; top: 0; z-index: 1;
   text-align: left; font-weight: 500; color: var(--dsw-alias-label-secondary);
@@ -169,6 +184,20 @@ const SECTION_CSS = `
 .cs-table tr:last-child td { border-bottom: none; }
 .cs-row--changed td { background: var(--dsw-alias-bg-layer-2, transparent); }
 .cs-id { font-variant-numeric: tabular-nums; word-break: break-all; }
+/* Cells that hold a control keep the row compact and the table inside the panel. */
+.cs-cell { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cs-input--cell, .cs-select--cell {
+  width: 100%; min-width: 0; padding: 2px 4px; font-size: 12px; line-height: 18px;
+  border-radius: 4px;
+}
+.cs-input--cell { text-align: right; font-variant-numeric: tabular-nums; }
+.cs-select--cell { padding-right: 2px; }
+/* A value the user typed is marked, so it is clear it did not come from the catalog. */
+.cs-input--typed, .cs-select--typed {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-brand-primary);
+}
+.cs-change--block { display: block; white-space: normal; }
 .cs-dim { color: var(--dsw-alias-label-tertiary); }
 .cs-change { white-space: nowrap; }
 .cs-from { color: var(--dsw-alias-label-tertiary); text-decoration: line-through; }

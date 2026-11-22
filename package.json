@@ -50,7 +50,8 @@
     "verify:package": "node scripts/verify-package.mjs",
     "pack:check": "npm pack --dry-run",
     "test:write-merge": "node --experimental-strip-types --test scripts/test-write-merge.mjs",
-    "test:locale": "node --experimental-strip-types --test scripts/test-locale.mjs"
+    "test:locale": "node --experimental-strip-types --test scripts/test-locale.mjs",
+    "test:fields": "node --experimental-strip-types --test scripts/test-fields.mjs"
   },
   "keywords": [
     "dsh",

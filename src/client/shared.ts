@@ -7,6 +7,7 @@
  * instead of narrowing the entry to the fields this plugin understands.
  * @module dsh-model-capability-sync/client/shared
  */
+import type { CapabilityFields } from '../types.ts'
 import type { SortMode } from '../sort.ts'
 import { sortByModelId } from '../sort.ts'
 
@@ -147,4 +148,50 @@ export function withWrittenModels(
     ...revision === undefined ? {} : { revision },
     value: { ...descriptor.value, providers: nextProviders },
   }
+}
+
+/**
+ * Read a hand-typed token count: `128K`, `1M`, `128000`, `1,000,000`.
+ *
+ * The cells show the short form (`1M`), so the same short form has to be
+ * accepted back: a field you can see you can also type. Anything that is not a
+ * number with an optional K/M suffix returns undefined, which the caller reads
+ * as "no manual value" rather than as zero.
+ * @param text - what the cell holds.
+ * @returns the count, or undefined when the text is not a count.
+ */
+export function parseTokenCount(text: string): number | undefined {
+  const trimmed = text.trim().replace(/[,_\s]/g, '')
+  if (trimmed === '') return undefined
+  const match = /^([0-9]+(?:\.[0-9]+)?)([kKmM])?$/.exec(trimmed)
+  if (match === null) return undefined
+  const amount = Number(match[1])
+  if (!Number.isFinite(amount) || amount <= 0) return undefined
+  const suffix = match[2]?.toLowerCase()
+  if (suffix === 'k') return Math.round(amount * 1000)
+  if (suffix === 'm') return Math.round(amount * 1_000_000)
+  return Math.round(amount)
+}
+
+/**
+ * Overlay hand-typed fields on the ones the catalog gave.
+ *
+ * The page shows numbers a person can change, because the catalog is not
+ * always right and sometimes has nothing at all: a rate-limited proxy route
+ * may need a smaller window than the upstream model advertises, and a model
+ * the catalog never heard of gets its whole entry typed by hand. Manual values
+ * therefore win, and they are applied even when "overwrite" is off — that
+ * switch governs catalog values replacing what the user already stored, not
+ * values the user just typed.
+ * @param base - catalog fields, when there were any.
+ * @param manual - fields typed in the table.
+ * @returns the fields a write would use.
+ */
+export function mergeFields(
+  base: CapabilityFields | undefined,
+  manual: CapabilityFields | undefined,
+): CapabilityFields | undefined {
+  if (base === undefined) return manual
+  if (manual === undefined) return base
+  return { ...base, ...manual }
 }
