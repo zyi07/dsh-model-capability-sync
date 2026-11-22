@@ -19,7 +19,31 @@
 
 ---
 
-## 2026-11-22（续）
+## 2026-11-22（发布）
+
+### 0.2.0 发布准备：GitHub 已完成，npm 待凭据
+
+**做了什么**：
+
+- `package.json` / `package-lock.json` 版本 0.1.0 → **0.2.0**（`npm version --no-git-tag-version`）。
+- 新增 `CHANGELOG.md`，写入 `files` 字段（让 tarball 自带历史），记录 0.2.0 全部变更：
+  名称重定向、两种排序 + 一键重排、参数可手改、匹配规则扩展（版本分隔符双向 /
+  变体标记 / 经销商命名空间 / 空格转横线），以及三个实战暴露的修复
+  （写入后重排丢名称、大小写选到经销商、表头渲染成 `colName`）。
+- 文档同步：README 的 tarball 文件名与 verify 项数（25 → 26，因为 `files` 多一项，
+  verify 脚本按 `manifest.files` 逐项检查）；`docs/publishing.md` 的版本表与发布状态。
+- **发布前验证**：typecheck 0 错误、build 通过、verify 26 项、61 条单测全绿。
+  另外 `npm pack` 后在干净目录 `npm install <tarball>` 实测：版本 0.2.0，
+  `doRename`/`doReorder`/`EditableNumber`/`typeField`/`notListed`/`spellGapsAsDashes`
+  全部在位，`CHANGELOG.md` 随包。
+- **GitHub 侧完成**：提交 `2039a77`、附注 tag `v0.2.0`，均已推送
+  （`git ls-remote` 确认 tag 指向该提交）。
+- 产物留在 `/root/deliver/plugin/dsh-model-capability-sync-0.2.0.tgz`
+  （117 KB，sha256 `8388494f…9e772`）。
+
+**未完成（需维护者凭据）**：`npm login` + `npm publish`。
+本机 `npm whoami` 返回 `need auth`，且 `.npmrc` 被安全策略禁止读取，
+确认无可用 token；`gh` CLI 未安装。这两步必须由你执行。
 
 ### 表格适配面板宽度 + 能力参数可直接手改
 
