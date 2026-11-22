@@ -152,7 +152,7 @@ dsh plugin --profile web add dsh-model-capability-sync
 从本地 tarball 安装：
 
 ```sh
-dsh plugin --profile web add /path/to/dsh-model-capability-sync-0.1.0.tgz
+dsh plugin --profile web add /path/to/dsh-model-capability-sync-0.2.0.tgz
 ```
 
 从本地源码安装（开发用）：
@@ -191,7 +191,7 @@ dsh plugin --profile web add /path/to/dsh-model-capability-sync
 npm install
 npm run typecheck        # 两端类型检查
 npm run build            # lib/index.js + lib/client.js
-npm run verify:package   # 发布卫生检查（25 项）
+npm run verify:package   # 发布卫生检查（26 项）
 
 # 单元测试（离线，不需要 profile 或网络）
 npm run test:rename      # 名称重定向规则（11 条）
