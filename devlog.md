@@ -19,7 +19,35 @@
 
 ---
 
-## 2026-11-12
+## 2026-11-22
+
+### 重命名/排序在 DSH 里"消失"：profile 被装回了 npm 0.1.0
+
+**现象**：设置页「模型能力同步」只剩能力补全，没有「重定向」「重排」和排序下拉。
+
+**根因**：profile 的依赖声明是 `dsh-model-capability-sync: ^0.1.0`，npm 上最新就是
+0.1.0——而重命名、排序、匹配规则扩展全都只在本地仓库里，**从未发布**。某次 profile
+重装（目录时间戳 11-13 15:59、目录 mtime 11-20）按依赖解析回 registry，把本地构建产物
+整个换成了旧版：`node_modules/.../src/client/` 里只剩 4 个文件，`rename.ts`、`shared.ts`
+都没了。
+
+**处置**（宿主侧插件管理器，不重启服务）：
+
+1. `remove_bundle dsh-model-capability-sync`（pnpm 移除 0.1.0）
+2. `install_bundle link:/root/dev/dsh-model-capability-sync`（装本地仓库，created symlink）
+
+现在 `node_modules/dsh-model-capability-sync -> /root/dev/dsh-model-capability-sync`，
+经 profile 路径核对：`doRename`/`doReorder`/`sortByPrefix`/`redirectApply`/`colName`
+（客户端）与 `spellGapsAsDashes`（宿主）全部在位。
+
+**注意**：
+
+- `link:` 方式下，以后改代码只需 `npm run build` + 重载插件，不用再复制文件；
+  但**移动或删除 `/root/dev/dsh-model-capability-sync` 插件会失效**。
+- 若再用 `dsh plugin add dsh-model-capability-sync` 从 npm 装，会退回 0.1.0（旧版）。
+  根治办法是发布 0.2.0 到 npm（需维护者 npm 凭据）。
+- pnpm 对 link 依赖报了 peerDependencies 警告，核对后无影响：宿主产物只 import
+  `node:*`，客户端只外部化 `react`（由 shell 提供）。
 
 ### 千问系列匹配不上 + 表头显示 `colName`
 
