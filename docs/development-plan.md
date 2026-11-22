@@ -111,6 +111,17 @@
 **验收**：那 37 个 id 中 34 个能匹配（剩 3 个是 id 里根本没有模型名、
 或目录里确实没有的）。
 
+## P2.9 表格与手改（完成）
+
+**目标**：一屏看全；目录给不了的参数能自己填。
+
+- 表格改 `table-layout: fixed` + `colgroup` 比例分配，ID 与名称折行，单元格控件收缩。
+- 上下文 / 输出改为数字输入（`1M` / `128K` / `1,000,000` 都能输入），图片改三态下拉。
+- 手填值标蓝、优先于目录值、不受「覆盖已有值」限制、重新分析不丢失。
+- 目录查不到的模型并入表格（原先只在下方列表里，无法编辑），匹配列显示「目录未收录」。
+
+**验证**：`scripts/test-fields.mjs` 6 条；全套 61 条测试、26 项发布检查。
+
 ## P3 兜底（下一步）
 
 **目标**：剩下无法自动推断的 id 也有出路。
@@ -142,14 +153,14 @@
 
 **注意**：需要停应用改 profile 再重启，会中断当前会话，必须先确认。
 
-## P5 打包（仓库已就绪，待发布）
+## P5 打包（0.2.0 已发布到 npm）
 
 **目标**：别人能用一条命令装上。
 
 - [x] `LICENSE`（MIT）
 - [x] `package.json`：`engines.dsh`、`publishConfig.access`、`peerDependenciesMeta`、
       `prepublishOnly`、`verify:package`
-- [x] `scripts/verify-package.mjs`：25 项发布前自检
+- [x] `scripts/verify-package.mjs`：26 项发布前自检（按 `manifest.files` 逐项检查）
 - [x] `npm pack` 产物在干净目录 `npm install` 后验证：可 `import`、
       `name`/`inject`/`apply` 正确、`lib/` 与 `src/` 齐全
 - [x] README：npm 安装 + tarball 安装 + 桌面版安装路径 + 许可证

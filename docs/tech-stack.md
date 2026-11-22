@@ -10,7 +10,7 @@
 | 运行时依赖 | **零** | 宿主产物不 import 任何第三方包；网络只用全局 `fetch`，文件只用 `node:fs/promises` |
 | 代理 | 可选动态导入 `undici` 的 `ProxyAgent` | 只在配置了代理时才加载；缺失时报明确错误而不是静默直连 |
 | 目录缓存 | 内存 6h + 本机 `~/.dsh/model-capability-sync/catalog.json` | 宿主进程的网络和命令行不一定相同；下载失败时回落本机副本，页面不至于打不开 |
-| 目录源 | `https://models.dev/api.json` | 公开、无需鉴权。实测 230 个供应商 / 8888 个模型，100% 带 `modalities` |
+| 目录源 | `https://models.dev/api.json` | 公开、无需鉴权。实测 324 个供应商 / 10022 个模型，100% 带 `modalities` |
 | 配置读写 | 官方 settings 服务（`remote.settings.describe/mutate`） | 与官方 Models 页同一条路径，落点就是 profile patch，热生效 |
 | 状态管理 | React 局部 state | 页面只有一张表，不引入状态库 |
 | 测试 | `node:test` + `assert/strict` | 无第三方测试框架；Node 24 的 `--experimental-strip-types` 可直接跑 `.ts` |

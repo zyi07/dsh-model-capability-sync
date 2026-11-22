@@ -87,7 +87,7 @@ description:
 | 仓库加 `dsh-plugin` topic | ⬜ 在仓库 About 里添加 |
 | 描述属实、分类贴合 | ✅ |
 | 官方 `@deepseek-ai/*` 用 `peerDependencies` 而不是 `dependencies` | ✅ |
-| 发布到 npm（预构建安装可跳过 `allowBuilds` 构建授权） | ⏳ 0.2.0 已构建待发布（需维护者 npm 凭据） |
+| 发布到 npm（预构建安装可跳过 `allowBuilds` 构建授权） | ✅ 0.2.0 已发布 |
 
 收录后会出现在两处：站点 `https://awesome-dsh-plugin.com/p/zyi07/dsh-model-capability-sync/`，
 以及插件市场（`index.json` 格式 1 索引，DSH 0.2.1+ 的「插件 → 发现」读的就是它）。
@@ -146,10 +146,10 @@ DSH 的发现页读取"格式 1"索引，用户把 URL 加到 **插件 → 发�
 | 版本 | 状态 | 含有什么 |
 | --- | --- | --- |
 | 0.1.0 | **已发布到 npm** | 能力补全、预览表、写入、差异预览、排序（单模式） |
-| 0.2.0 | **已构建、待发布** | 名称重定向（`【供应商】`/`【other】`）、排序二选一 + 一键重排、参数可手改、匹配规则扩展（版本分隔符双向 / 变体标记 / 前缀 / 经销商命名空间 / 空格转横线）、名称降级匹配 |
+| 0.2.0 | **已发布到 npm（latest）** | 名称重定向（`【供应商】`/`【other】`）、排序二选一 + 一键重排、参数可手改、匹配规则扩展（版本分隔符双向 / 变体标记 / 前缀 / 经销商命名空间 / 空格转横线）、名称降级匹配 |
 
-`package.json` 的 `version` 已是 `0.2.0`，`CHANGELOG.md` 已写好，tarball 已验证可安装。
-剩下的只有需要凭据的两步：`npm login` 与 `npm publish`。
+`package.json` 的 `version` 是 `0.2.0`，`CHANGELOG.md` 已随包发布，git tag `v0.2.0` 已推送。
+`npm view dsh-model-capability-sync version` 返回 `0.2.0`，dist-tag `latest` 指向它。
 
 本地离线分发：`npm pack` 产出 `.tgz`，拷到目标机器用
 `dsh plugin add /path/to/dsh-model-capability-sync-0.2.0.tgz` 安装。
