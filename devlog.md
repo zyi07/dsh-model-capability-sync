@@ -22,7 +22,37 @@
 
 ---
 
-## 2026-11-22（dshmarket 投稿）
+## 2026-11-23
+
+### 安装说明补全，本机改用 npm 正式依赖
+
+**背景**：用户问「别人想装这个插件怎么操作」。核对发现 README 的安装段是站在作者
+视角写的——没提 `web` 是 profile 名要替换、没说 tarball 自带预构建 `lib/` 所以
+不需要构建授权、没有"装完怎么确认"。
+
+**实测**（不是照文档写，是真的装了一遍）：
+
+- `npm install dsh-model-capability-sync` 在干净目录装成功，1 秒，0 漏洞。
+- 包内 `lib/`（client.js + index.js）已预构建，`cordis.patch.yml` 在位，
+  `dsh.bundle` 已声明 → 安装时不需要联网构建，也不需要 `allowBuilds` 授权。
+- 包体积 407 KB 解包 / 32 文件。
+- `engines.dsh: ^0.2.1-rc.2`；本机 `dsh --version` = `0.2.2-rc.5`，满足。
+- `npm view` 确认 `latest` = 0.2.1（此前文档里固定版本示例还写 0.2.0）。
+
+**README 安装段重写**：版本门槛前置、profile 名替换说明、五种安装方式分开
+（npm / 固定版本 / 离线 tarball / 源码 / 桌面版）、末尾给三条"装完怎么确认"。
+
+**本机 profile 切换**：原先是 `link:/root/dev/dsh-model-capability-sync`（符号链接，
+改代码即生效但目录不能动）。既然 0.2.1 已发布，改为正式依赖
+`dsh-model-capability-sync@0.2.1`，`node_modules` 现在是真实目录而非符号链接，
+功能核对齐全（`doRename` / `EditableNumber` / `notListed` 均在）。
+备份：`/root/.profile-package-backup-20261123.json`。
+
+**顺带清理**：仓库根目录有一份投稿 YAML 草稿（`zyi07__dsh-model-capability-sync.yml`），
+是早期版本、与 `/root/deliver/dshmarket/` 下的最终版内容不同。已删除仓库内副本，
+以交付目录的版本为准。
+
+提交 `bc510bb`，已推送。
 
 ### 提交到 dshmarket：条目已备好，PR 待 token
 
