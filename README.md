@@ -170,36 +170,55 @@
 
 ## 安装
 
-从 npm 安装：
+**装之前先确认 DSH 版本**：本插件要求 `dsh >= 0.2.1-rc.2`（写在 `package.json` 的
+`engines.dsh`，宿主据此做兼容检查）。跑一下 `dsh --version` 看看。
+
+### 从 npm 安装（推荐）
 
 ```sh
 dsh plugin --profile web add dsh-model-capability-sync
 ```
 
-指定版本：
+`web` 是 profile 名。用别的 profile 就换成实际的，例如
+`dsh plugin --profile myprofile add dsh-model-capability-sync`。
+
+装完**重启 dsh**，设置页左侧会多出「模型能力同步」。
+
+### 固定版本
 
 ```sh
-dsh plugin --profile web add dsh-model-capability-sync@0.2.0
+dsh plugin --profile web add dsh-model-capability-sync@0.2.1
 ```
 
-从本地 tarball 安装：
+### 从本地 tarball 安装（离线 / 内网）
 
 ```sh
-dsh plugin --profile web add /path/to/dsh-model-capability-sync-0.2.0.tgz
+dsh plugin --profile web add /path/to/dsh-model-capability-sync-0.2.1.tgz
 ```
 
-从本地源码安装（开发用）：
+包内已带构建好的 `lib/`，**安装时不需要联网构建**，也不需要 `allowBuilds` 授权。
+
+### 从源码安装（开发用）
 
 ```sh
+git clone https://github.com/zyi07/dsh-model-capability-sync
+cd dsh-model-capability-sync && npm install && npm run build
 dsh plugin --profile web add /path/to/dsh-model-capability-sync
 ```
 
-**DSH 桌面版不要用命令行装**：桌面应用独占自己的 profile，CLI 改动不生效，
-请在应用内 **设置 → 插件** 里安装。
+### DSH 桌面版
 
-装完重启 dsh，设置页会出现「模型能力同步」。
+**不要用命令行装**：桌面应用独占自己的 profile，CLI 改动不生效。
+在应用内打开 **设置 → 插件**，搜索 `dsh-model-capability-sync` 安装。
 
-要求：`dsh` 运行时 `^0.2.1-rc.2`（写在 `package.json` 的 `engines.dsh`，宿主会据此做兼容检查）。
+### 装完怎么确认
+
+1. 重启 dsh。
+2. 设置页左侧出现「模型能力同步」，点进去能看到模型列表。
+3. 点「分析能力」，表格填出上下文 / 输出 / 图片等列。
+
+若没有出现：检查 profile 名是否写错（`dsh plugin --profile <名字> list` 能看到已装的包），
+以及 dsh 是否满足版本要求。
 
 ## 目录结构
 
